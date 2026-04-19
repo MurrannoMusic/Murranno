@@ -1,0 +1,119 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "TEAM_ID.com.murranno.music"
+        ],
+        "components": [
+          {
+            "/": "/release/*",
+            "comment": "Release details"
+          },
+          {
+            "/": "/artist/*",
+            "comment": "Artist profiles"
+          },
+          {
+            "/": "/campaign/*",
+            "comment": "Campaign tracking"
+          },
+          {
+            "/": "/campaigns",
+            "comment": "Campaigns list"
+          },
+          {
+            "/": "/promotions/*",
+            "comment": "Promotion details"
+          },
+          {
+            "/": "/promotions",
+            "comment": "Promotions list"
+          },
+          {
+            "/": "/upload",
+            "comment": "Upload screen"
+          },
+          {
+            "/": "/earnings",
+            "comment": "Earnings overview"
+          },
+          {
+            "/": "/wallet",
+            "comment": "Wallet"
+          },
+          {
+            "/": "/analytics",
+            "comment": "Analytics"
+          },
+          {
+            "/": "/settings",
+            "comment": "Settings"
+          },
+          {
+            "/": "/profile",
+            "comment": "Profile"
+          },
+          {
+            "/": "/notifications",
+            "comment": "Notifications"
+          },
+          {
+            "/": "/subscription",
+            "comment": "Subscription plans"
+          },
+          {
+            "/": "/dashboard",
+            "comment": "Dashboard"
+          },
+          {
+            "/": "/releases",
+            "comment": "Releases list"
+          },
+          {
+            "/": "/label/*",
+            "comment": "Label routes"
+          },
+          {
+            "/": "/agency/*",
+            "comment": "Agency routes"
+          },
+          {
+            "/": "/admin/*",
+            "comment": "Admin routes"
+          },
+          {
+            "/": "/reset-password",
+            "comment": "Password reset"
+          },
+          {
+            "/": "/verify-email",
+            "comment": "Email verification"
+          },
+          {
+            "/": "/callback",
+            "comment": "OAuth callback"
+          },
+          {
+            "/": "/welcome",
+            "comment": "Welcome screen"
+          },
+          {
+            "/": "/login",
+            "comment": "Login"
+          },
+          {
+            "/": "/signup",
+            "comment": "Sign up"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAM_ID.com.murranno.music"
+    ]
+  }
+}

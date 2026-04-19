@@ -1,0 +1,97 @@
+project_id = "xsyzebusnqzxpnsruuoc"
+
+[functions.get-subscription-plans]
+verify_jwt = false
+
+[functions.get-platform-settings]
+verify_jwt = true
+
+[functions.update-platform-settings]
+verify_jwt = true
+
+[functions.admin-promote-user]
+verify_jwt = true
+
+[functions.paystack-resolve-account]
+verify_jwt = true
+
+[functions.paystack-create-recipient]
+verify_jwt = true
+
+[functions.paystack-initiate-withdrawal]
+verify_jwt = true
+
+[functions.paystack-get-banks]
+verify_jwt = true
+
+[functions.admin-get-all-users]
+verify_jwt = true
+
+[functions.admin-update-user-role]
+verify_jwt = true
+
+[functions.admin-get-platform-analytics]
+verify_jwt = true
+
+[functions.admin-moderate-release]
+verify_jwt = true
+
+[functions.admin-get-audit-logs]
+verify_jwt = true
+
+[functions.paystack-initialize-campaign-payment]
+verify_jwt = true
+
+[functions.paystack-campaign-payment-webhook]
+verify_jwt = false
+
+[functions.admin-get-all-campaigns]
+verify_jwt = true
+
+[functions.admin-update-campaign-status]
+verify_jwt = true
+
+[functions.send-campaign-notification]
+verify_jwt = false
+
+[functions.admin-bulk-update-campaigns]
+verify_jwt = true
+
+[functions.get-campaign-performance]
+verify_jwt = true
+
+[functions.seed-promotion-services]
+verify_jwt = true
+
+[functions.update-campaign-metrics]
+verify_jwt = true
+
+[functions.complete-campaign-service]
+verify_jwt = true
+
+[functions.pause-campaign]
+verify_jwt = true
+
+[functions.send-welcome-email]
+verify_jwt = false
+
+[functions.send-campaign-status-email]
+verify_jwt = false
+
+[functions.send-earnings-alert-email]
+verify_jwt = false
+
+[functions.invite-client-to-agency]
+verify_jwt = true
+
+[functions.send-release-status-email]
+verify_jwt = false
+
+[functions.generate-receipt]
+verify_jwt = true
+
+[functions.send-notification-email]
+verify_jwt = true
+
+[functions.register-push-token]
+verify_jwt = true

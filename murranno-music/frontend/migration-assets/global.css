@@ -1,0 +1,110 @@
+/**
+ * Global CSS for NativeWind
+ * This file imports Tailwind and defines custom utilities
+ * 
+ * Note: Some web-specific features are not available in React Native
+ * This file focuses on what's supported
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom utility classes that work with NativeWind */
+@layer components {
+  /* Modern Card System */
+  .modern-card {
+    @apply bg-card/80 border border-border/30 rounded-3xl p-4;
+  }
+
+  .stat-card {
+    @apply bg-card/90 border border-border/20 rounded-2xl p-4;
+  }
+
+  .glass-card {
+    @apply bg-card/40 border border-border/20 rounded-3xl p-6;
+  }
+
+  .glass-nav {
+    @apply bg-background/80 border-t border-border/20;
+  }
+
+  /* Button System */
+  .pill-button {
+    @apply bg-primary px-8 py-4 rounded-full;
+  }
+
+  .ghost-button {
+    @apply bg-secondary/30 px-6 py-3 rounded-2xl border border-border/30;
+  }
+
+  /* Typography */
+  .heading-xl {
+    @apply text-3xl font-bold tracking-tight text-foreground;
+  }
+
+  .heading-lg {
+    @apply text-2xl font-bold tracking-tight text-foreground;
+  }
+
+  .heading-md {
+    @apply text-xl font-semibold text-foreground;
+  }
+
+  .body-lg {
+    @apply text-base font-medium text-foreground/90;
+  }
+
+  .body-md {
+    @apply text-sm font-medium text-foreground/80;
+  }
+
+  .body-sm {
+    @apply text-xs font-medium text-muted-foreground;
+  }
+
+  /* Layout Utilities */
+  .mobile-safe-bottom {
+    @apply pb-20;
+  }
+
+  .mobile-safe-top {
+    @apply pt-8;
+  }
+
+  .mobile-container {
+    @apply w-full px-4;
+  }
+
+  /* Interactive Elements */
+  .nav-item {
+    @apply flex flex-col items-center gap-1.5 p-3 rounded-2xl;
+  }
+
+  .nav-item-active {
+    @apply bg-primary/15;
+  }
+
+  /* Tab System */
+  .pill-tab {
+    @apply px-4 py-2 rounded-full;
+  }
+
+  .pill-tab-active {
+    @apply bg-primary;
+  }
+
+  /* List Items */
+  .list-item {
+    @apply flex flex-row items-center gap-4 p-4 rounded-2xl;
+  }
+
+  /* Portfolio Display */
+  .portfolio-change-positive {
+    @apply text-sm font-semibold text-success;
+  }
+
+  .portfolio-change-negative {
+    @apply text-sm font-semibold text-destructive;
+  }
+}

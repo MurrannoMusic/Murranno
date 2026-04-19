@@ -1,0 +1,76 @@
+[build]
+  # Build command
+  command = "npm run build"
+  
+  # Publish directory (Vite default output)
+  publish = "dist"
+  
+  # Node version and Secret Scanning Exceptions
+  environment = { NODE_VERSION = "24", SECRETS_SCAN_OMIT_KEYS = "VITE_CLOUDINARY_CLOUD_NAME,VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_PROJECT_ID,VITE_SUPABASE_PUBLISHABLE_KEY,VITE_SUPABASE_URL" }
+
+# Redirect rules for Single Page Application (React Router)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Content Security Policy
+    Content-Security-Policy = """
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://res.cloudinary.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https: http:;
+      media-src 'self' blob: https: http:;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://res.cloudinary.com https://api.cloudinary.com;
+      frame-src 'self';
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      frame-ancestors 'none';
+      upgrade-insecure-requests;
+    """
+    
+    # Strict Transport Security
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    
+    # Prevent clickjacking
+    X-Frame-Options = "DENY"
+    
+    # XSS Protection
+    X-Content-Type-Options = "nosniff"
+    
+    # Referrer Policy
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    
+    # Permissions Policy
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Cache static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Cache service worker with short TTL
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Cache workbox with short TTL
+[[headers]]
+  for = "/workbox-*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Environment variables (these should be set in Netlify UI)
+# VITE_CLOUDINARY_CLOUD_NAME
+# VITE_SUPABASE_PROJECT_ID
+# VITE_SUPABASE_PUBLISHABLE_KEY
+# VITE_SUPABASE_URL
+# VITE_SUPABASE_ANON_KEY

@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.murranno.music",
+      "sha256_cert_fingerprints": [
+        "SHA256_FINGERPRINT_DEBUG_REPLACE_ME",
+        "SHA256_FINGERPRINT_RELEASE_REPLACE_ME"
+      ]
+    }
+  }
+]

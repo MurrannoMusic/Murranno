@@ -1,0 +1,125 @@
+/**
+ * React Native App Entry Point Template
+ * 
+ * Copy this to your Expo project's App.tsx
+ */
+import './global.css'; // NativeWind v4 requires this import
+import React, { useEffect, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { NavigationContainer } from '@react-navigation/native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import Toast from 'react-native-toast-message';
+import * as Linking from 'expo-linking';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Import your providers and navigators
+// import { AuthProvider } from './src/contexts/AuthContext';
+// import { CartProvider } from './src/contexts/CartContext';
+// import { AppNavigator } from './src/navigation/AppNavigator';
+
+// Keep splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
+
+// Create a client for React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 2,
+    },
+  },
+});
+
+// Deep linking configuration
+const linking = {
+  prefixes: [
+    Linking.createURL('/'),
+    'murranno://',
+    'https://nqfltvbzqxdxsobhedci.supabase.co',
+  ],
+  config: {
+    screens: {
+      // Auth screens
+      Login: 'login',
+      Signup: 'signup',
+      ForgotPassword: 'forgot-password',
+      ResetPassword: 'reset-password',
+      AuthCallback: 'auth/callback',
+      VerifyEmail: 'verify-email',
+      
+      // Main screens
+      Main: {
+        screens: {
+          Home: 'home',
+          Releases: 'releases',
+          Campaigns: 'campaigns',
+          Wallet: 'wallet',
+          Profile: 'profile',
+        },
+      },
+      
+      // Detail screens
+      ReleaseDetail: 'release/:id',
+      ArtistDetail: 'artist/:id',
+      CampaignDetail: 'campaign/:id',
+      
+      // Settings
+      Settings: 'settings',
+      
+      // Not found
+      NotFound: '*',
+    },
+  },
+};
+
+export default function App() {
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  useEffect(() => {
+    async function prepare() {
+      try {
+        // Pre-load fonts, make API calls, etc.
+        // await Font.loadAsync({...});
+        
+        // Artificially delay for demo purposes
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setAppIsReady(true);
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    prepare();
+  }, []);
+
+  if (!appIsReady) {
+    return null;
+  }
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          {/* 
+            Wrap with your providers:
+            <AuthProvider>
+              <CartProvider>
+          */}
+          <NavigationContainer linking={linking}>
+            <StatusBar style="light" />
+            {/* <AppNavigator /> */}
+          </NavigationContainer>
+          <Toast />
+          {/*
+              </CartProvider>
+            </AuthProvider>
+          */}
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}

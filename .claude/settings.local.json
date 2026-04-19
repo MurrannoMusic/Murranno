@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/PRECISE/.claude/skills/react-to-expo/evals/**)",
+      "Bash(mkdir -p 'C:/Users/PRECISE/.claude/skills/react-to-expo/evals/fixtures/vite-react-router-css-modules/src/components' 'C:/Users/PRECISE/.claude/skills/react-to-expo/evals/fixtures/vite-react-router-css-modules/src/pages')",
+      "Bash(mkdir -p \"C:/Users/PRECISE/.claude/skills/react-to-expo/evals/fixtures/cra-styled-components-framer/src/components\" \"C:/Users/PRECISE/.claude/skills/react-to-expo/evals/fixtures/cra-styled-components-framer/src/pages\" \"C:/Users/PRECISE/.claude/skills/react-to-expo/evals/fixtures/cra-styled-components-framer/src/hooks\" \"C:/Users/PRECISE/.claude/skills/react-to-expo/evals/fixtures/cra-styled-components-framer/public\")",
+      "Bash(supabase --version)",
+      "Bash(supabase projects *)",
+      "Bash(supabase db *)",
+      "Bash(supabase link *)",
+      "Bash(supabase whoami *)",
+      "Read(//c/Users/PRECISE/.config/supabase/**)",
+      "Read(//c/Users/PRECISE/.supabase/**)",
+      "Read(//c/Users/PRECISE/.config/**)"
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "362995292178",
+    "project_id": "murranno-music",
+    "storage_bucket": "murranno-music.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:362995292178:android:ff84604a7b947a86db20cb",
+        "android_client_info": {
+          "package_name": "com.murrannomusic.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvJkHtic_oI07JACx5NEfuyTC8Nyy-LQQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
