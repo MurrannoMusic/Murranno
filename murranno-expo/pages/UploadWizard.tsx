@@ -9,11 +9,15 @@ import {
     Check, AlertCircle, ChevronDown, ChevronUp, X,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '@/hooks/useTheme';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload';
 import { supabase } from '@/integrations/supabase/client';
+import { useArtistProfile } from '@/hooks/useArtistProfile';
+import { KYCGate } from '@/components/kyc/KYCGate';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -96,10 +100,57 @@ export const UploadWizard = () => {
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
     const { uploadImage, uploadAudio, uploading, progress } = useCloudinaryUpload();
+    const { profile, loading: profileLoading } = useArtistProfile();
 
     // Wizard state
     const [step, setStep] = useState(1);
     const TOTAL_STEPS = 5;
+
+    // Step 1: Release Info
+    const [releaseType, setReleaseType]           = useState<ReleaseType>('Single');
+    const [releaseTitle, setReleaseTitle]         = useState('');
+    const [artistName, setArtistName]             = useState('');
+    const [primaryGenre, setPrimaryGenre]         = useState('');
+    const [secondaryGenre, setSecondaryGenre]     = useState('');
+    const [description, setDescription]           = useState('');
+    const [coverArtUri, setCoverArtUri]           = useState<string | null>(null);
+    const [showGenrePicker, setShowGenrePicker]   = useState<'primary' | 'secondary' | null>(null);
+
+    // Step 2: Tracks
+    const [tracks, setTracks] = useState<TrackItem[]>([]);
+
+    // Step 3: Distribution
+    const [releaseDate, setReleaseDate]           = useState('');
+    const [language, setLanguage]                 = useState('English');
+    const [recordingYear, setRecordingYear]       = useState(new Date().getFullYear().toString());
+    const [labelName, setLabelName]               = useState('');
+    const [isExistingRelease, setIsExistingRelease] = useState(false);
+    const [upc, setUpc]                           = useState('');
+    const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+
+    // Step 4: Credits
+    const [globalLegalName, setGlobalLegalName]   = useState('');
+
+    // Step 5: Submit
+    const [isSubmitting, setIsSubmitting]         = useState(false);
+    const [uploadError, setUploadError]           = useState<string | null>(null);
+
+    if (profileLoading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+                <ActivityIndicator color={colors.primaryGlow} />
+            </View>
+        );
+    }
+
+    if (profile?.kyc_status !== 'verified') {
+        return (
+            <View style={{ flex: 1, backgroundColor: colors.background }}>
+                <AppHeader showCurrencyToggle={false} />
+                <KYCGate />
+            </View>
+        );
+    }
 
     // Step 1: Release Info
     const [releaseType, setReleaseType]           = useState<ReleaseType>('Single');
@@ -140,22 +191,58 @@ export const UploadWizard = () => {
     const updateTrack = (id: string, field: keyof TrackItem, value: any) =>
         setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
 
-    const addDemoTrack = () => {
-        // For demo — actual file picking requires expo-document-picker
-        Alert.alert(
-            'File Picker Required',
-            'To pick audio files, install expo-document-picker:\n\nnpx expo install expo-document-picker',
-            [{ text: 'OK' }],
-        );
+    const addDemoTrack = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['audio/wav', 'audio/x-wav', 'audio/flac', 'audio/x-flac'],
+                copyToCacheDirectory: true,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                const newTrack: TrackItem = {
+                    id: Math.random().toString(36).substring(7),
+                    uri: asset.uri,
+                    name: asset.name,
+                    size: asset.size ?? null,
+                    title: asset.name.replace(/\.[^/.]+$/, ""), // Remove extension
+                    duration: null,
+                    featuredArtists: [],
+                    producers: [],
+                    legalName: '',
+                    lyrics: '',
+                    trackType: 'clean',
+                };
+                setTracks((prev) => [...prev, newTrack]);
+            }
+        } catch (err) {
+            console.error('Document picking error:', err);
+            Alert.alert('Error', 'Failed to pick audio file');
+        }
     };
 
-    const pickCoverArt = () => {
-        // For demo — actual image picking requires expo-image-picker
-        Alert.alert(
-            'Image Picker Required',
-            'To pick cover art, install expo-image-picker:\n\nnpx expo install expo-image-picker',
-            [{ text: 'OK' }],
-        );
+    const pickCoverArt = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'We need access to your photos to upload cover art.');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                setCoverArtUri(result.assets[0].uri);
+            }
+        } catch (err) {
+            console.error('Image picking error:', err);
+            Alert.alert('Error', 'Failed to pick cover art');
+        }
     };
 
     const handleNext = () => {
@@ -240,12 +327,45 @@ export const UploadWizard = () => {
                 songwriter_legal_names: [t.legalName || globalLegalName],
             }));
 
+            // 1. Upload Cover Art
+            let remoteCoverArtUrl = null;
+            if (coverArtUri) {
+                try {
+                    const res = await uploadImage({ 
+                        uri: coverArtUri, 
+                        type: 'image/jpeg', 
+                        name: `cover_${Date.now()}.jpg` 
+                    }, 'cover-arts');
+                    remoteCoverArtUrl = res.url;
+                } catch (e) {
+                    throw new Error('Failed to upload cover art');
+                }
+            }
+
+            // 2. Upload Tracks
+            const remoteAudioFiles = [];
+            for (const t of tracks) {
+                if (t.uri) {
+                    try {
+                        const res = await uploadAudio({ 
+                            uri: t.uri, 
+                            type: 'audio/wav', 
+                            name: t.name 
+                        }, 'audio-tracks');
+                        remoteAudioFiles.push({ url: res.url });
+                    } catch (e) {
+                        throw new Error(`Failed to upload track: ${t.title}`);
+                    }
+                }
+            }
+
+            // 3. Submit to Backend
             const { data, error } = await supabase.functions.invoke('upload-track', {
                 body: {
                     releaseData,
                     tracks: tracksPayload,
-                    coverArtFile: coverArtUri ? { url: coverArtUri } : null,
-                    audioFiles: tracks.map((t) => ({ url: t.uri ?? '' })),
+                    coverArtFile: remoteCoverArtUrl ? { url: remoteCoverArtUrl } : null,
+                    audioFiles: remoteAudioFiles,
                 },
             });
 

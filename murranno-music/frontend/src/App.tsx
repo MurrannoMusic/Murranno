@@ -82,6 +82,7 @@ const DeveloperSettings = lazy(() => import("./pages/DeveloperSettings"));
 const DeepLinkTest = lazy(() => import("./pages/DeepLinkTest"));
 const PitchTool = lazy(() => import("./pages/tools/PitchTool")); // Default exports
 const SmartLinkTool = lazy(() => import("./pages/tools/SmartLinkTool"));
+const DeleteAccount = lazy(() => import("./pages/DeleteAccount").then(module => ({ default: module.DeleteAccount })));
 
 // Loading Fallback
 const PageLoader = () => (
@@ -142,6 +143,7 @@ const App = () => (
                   {/* Legal & Support Pages */}
                   <Route path="/terms" element={<Suspense fallback={<PageLoader />}><TermsOfService /></Suspense>} />
                   <Route path="/privacy" element={<Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>} />
+                  <Route path="/delete-account" element={<Suspense fallback={<PageLoader />}><DeleteAccount /></Suspense>} />
                   <Route path="/faq" element={<Suspense fallback={<PageLoader />}><FAQ /></Suspense>} />
                   <Route path="/support" element={<Suspense fallback={<PageLoader />}><Support /></Suspense>} />
                   <Route path="/preflight-check" element={<Suspense fallback={<PageLoader />}><PreflightCheck /></Suspense>} />

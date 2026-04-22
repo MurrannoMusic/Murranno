@@ -27,6 +27,8 @@ export interface ArtistProfile {
   tiktok_url: string | null;
   twitter_url: string | null;
   created_at: string;
+  kyc_status: 'unverified' | 'pending' | 'verified' | 'rejected' | null;
+  kyc_tier: number | null;
 }
 
 export const useArtistProfile = () => {

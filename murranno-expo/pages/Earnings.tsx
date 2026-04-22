@@ -8,9 +8,11 @@ import {
     Wallet, DollarSign, Clock, TrendingUp, ArrowUpRight,
     Plus, Star, Trash2, Settings, Filter, CheckCircle,
     Music, ChevronDown, AlertCircle, CheckCircle2,
+    Eye, EyeOff,
 } from 'lucide-react-native';
 
 import { useTheme } from '@/hooks/useTheme';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { useWallet } from '@/hooks/useWallet';
@@ -18,9 +20,6 @@ import { usePayoutMethods } from '@/hooks/usePayoutMethods';
 import { supabase } from '@/integrations/supabase/client';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
-
-const fmtCurrency = (n: number) =>
-    `₦${Number(n).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const statusColor = (status: string, colors: any) => {
     switch (status) {
@@ -387,19 +386,36 @@ const WithdrawModal = ({
 
 export const Earnings = () => {
     const { colors, isDark } = useTheme();
+    const { formatAmount: fmtCurrency } = useCurrency();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
     const [activeTab, setActiveTab]         = useState<'balance' | 'methods' | 'history'>('balance');
     const [showAddBank, setShowAddBank]     = useState(false);
     const [showFilters, setShowFilters]     = useState(false);
     const [showWithdraw, setShowWithdraw]   = useState(false);
+    const [showBalance, setShowBalance]     = useState(true);
 
     const { balance, loading: balLoading, refetch: refetchBalance } = useWalletBalance();
     const { transactions, earningsSources, statusFilter, setStatusFilter,
             typeFilter, setTypeFilter, loading: walLoading } = useWallet();
     const { payoutMethods, loading: pmLoading, deleteMethod, setPrimary,
             refetch: refetchMethods } = usePayoutMethods();
+    const { profile } = useArtistProfile();
 
+    const handleWithdrawPress = () => {
+        if (profile?.kyc_status !== 'verified') {
+            Alert.alert(
+                'Verification Required',
+                'You must complete KYC verification before you can withdraw funds. This is required for tax and identity compliance.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Verify Now', onPress: () => router.push('/app/kyc' as any) }
+                ]
+            );
+            return;
+        }
+        setShowWithdraw(true);
+    };
     const percentageChange = balance && balance.total_earnings > 0
         ? ((balance.available_balance / balance.total_earnings) * 100).toFixed(1)
         : '0';
@@ -458,12 +474,15 @@ export const Earnings = () => {
                                             <Text style={s.availableLabel}>AVAILABLE BALANCE</Text>
                                             <Text style={s.balanceAmount}>
                                                 <Text style={s.balanceCurrency}>₦</Text>
-                                                {Number(balance.available_balance).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                {showBalance 
+                                                    ? Number(balance.available_balance).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                                    : '••••••'
+                                                }
                                             </Text>
                                         </View>
-                                        <View style={s.balanceDollarBadge}>
-                                            <DollarSign size={20} color={colors.primaryGlow} />
-                                        </View>
+                                        <Pressable style={s.balanceDollarBadge} onPress={() => setShowBalance(!showBalance)}>
+                                            {showBalance ? <Eye size={20} color={colors.primaryGlow} /> : <EyeOff size={20} color={colors.primaryGlow} />}
+                                        </Pressable>
                                     </View>
 
                                     <View style={s.balanceMeta}>
@@ -484,7 +503,7 @@ export const Earnings = () => {
                                     </View>
 
                                     <View style={s.balanceBtns}>
-                                        <Pressable style={s.withdrawBtn} onPress={() => setShowWithdraw(true)}>
+                                        <Pressable style={s.withdrawBtn} onPress={handleWithdrawPress}>
                                             <Text style={s.withdrawBtnText}>Withdraw Funds</Text>
                                         </Pressable>
                                         <Pressable style={s.plusBtn}>

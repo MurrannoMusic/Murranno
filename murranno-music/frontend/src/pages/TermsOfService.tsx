@@ -119,7 +119,7 @@ export const TermsOfService = () => {
           <section>
             <h2 className="text-lg font-semibold mb-2">12. Contact Information</h2>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              For questions about these terms, contact us at legal@murrannomusic.com
+              For questions about these terms, contact us at legal@murrannomusic.co
             </p>
           </section>
 

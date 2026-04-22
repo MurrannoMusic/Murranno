@@ -42,6 +42,7 @@ interface PlatformSettings {
   minimumPayout: number;
   payoutSchedule: string;
   platformFee: number;
+  usdToNgnRate: number;
   emailNotifications: boolean;
   smsNotifications: boolean;
   helpCenterUrl?: string;
@@ -70,6 +71,7 @@ export default function AdminSettings() {
     minimumPayout: 5000,
     payoutSchedule: 'monthly',
     platformFee: 15,
+    usdToNgnRate: 1600,
     emailNotifications: true,
     smsNotifications: false,
     helpCenterUrl: '',
@@ -110,6 +112,7 @@ export default function AdminSettings() {
         minimumPayout: Number(settingsData.minimum_payout_amount),
         payoutSchedule: settingsData.payout_schedule,
         platformFee: Number(settingsData.platform_fee_percentage),
+        usdToNgnRate: Number(settingsData.usd_to_ngn_rate) || 1600,
         emailNotifications: settingsData.email_notifications_enabled,
         smsNotifications: settingsData.sms_notifications_enabled,
         helpCenterUrl: settingsData.help_center_url,
@@ -449,6 +452,33 @@ export default function AdminSettings() {
                       <SelectItem value="quarterly">Quarterly</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  Currency Settings
+                </CardTitle>
+                <CardDescription>
+                  Exchange rate used by the mobile app's NGN/USD toggle
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="usd-ngn-rate">USD → NGN Rate</Label>
+                  <Input
+                    id="usd-ngn-rate"
+                    type="number"
+                    min="1"
+                    value={settings.usdToNgnRate}
+                    onChange={(e) => updateSetting('usdToNgnRate', parseFloat(e.target.value))}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    1 USD = {settings.usdToNgnRate.toLocaleString()} NGN — artists see this rate when switching currency in the app
+                  </p>
                 </div>
               </CardContent>
             </Card>

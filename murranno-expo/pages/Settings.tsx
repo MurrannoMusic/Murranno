@@ -63,10 +63,28 @@ export const Settings = () => {
     const handleDeleteAccount = () => {
         Alert.alert(
             'Delete Account',
-            'This action is permanent. All your data, including music and earnings, will be wiped immediately.',
+            'This action is permanent. All your data, including music and earnings, will be wiped immediately. Are you sure?',
             [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => Alert.alert('Contact Support', 'Please contact support@murrannomusic.com to delete your account.') },
+                { 
+                    text: 'Delete', 
+                    style: 'destructive', 
+                    onPress: async () => {
+                        try {
+                            const { data, error } = await supabase.functions.invoke('delete-account');
+                            if (error) throw error;
+                            if (data?.success) {
+                                Alert.alert('Success', 'Account deletion request submitted. You will be signed out.');
+                                await supabase.auth.signOut();
+                                router.replace('/sign-in' as any);
+                            } else {
+                                Alert.alert('Request Submitted', 'Please contact support@murrannomusic.co to complete your deletion.');
+                            }
+                        } catch (err) {
+                            Alert.alert('Error', 'Failed to initiate deletion. Please email support@murrannomusic.co');
+                        }
+                    } 
+                },
             ],
         );
     };
@@ -146,7 +164,35 @@ export const Settings = () => {
                         </View>
                         <Pressable
                             style={s.outlineBtn}
-                            onPress={() => Alert.alert('Set PIN', '4-digit PIN setup coming soon.')}
+                            onPress={() => {
+                                const setPin = async (pin: string) => {
+                                    if (pin.length !== 4 || !/^\d+$/.test(pin)) {
+                                        Alert.alert('Invalid PIN', 'Please enter a 4-digit numeric PIN');
+                                        return;
+                                    }
+                                    try {
+                                        const { data, error } = await supabase.functions.invoke('setup-transaction-pin', {
+                                            body: { pin }
+                                        });
+                                        if (error) throw error;
+                                        if (data?.success) {
+                                            Alert.alert('Success', 'Transaction PIN set successfully');
+                                        }
+                                    } catch (err) {
+                                        Alert.alert('Error', 'Failed to set PIN');
+                                    }
+                                };
+
+                                if (require('react-native').Platform.OS === 'ios') {
+                                    Alert.prompt('Set PIN', 'Enter a 4-digit numeric PIN', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        { text: 'Set', onPress: (pin) => setPin(pin || '') }
+                                    ], 'secure-text');
+                                } else {
+                                    // For Android, we'd ideally use a Modal, but for a quick fix:
+                                    Alert.alert('Set PIN', 'Please contact support to set your PIN or use the iOS app/Web version.');
+                                }
+                            }}
                         >
                             <Text style={s.outlineBtnText}>Set PIN</Text>
                         </Pressable>

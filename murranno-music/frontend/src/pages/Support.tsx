@@ -88,7 +88,7 @@ export const Support = () => {
                 <CardHeader className="p-4">
                   <Mail className="h-5 w-5 mb-1 text-primary" />
                   <CardTitle className="text-sm">Email Support</CardTitle>
-                  <CardDescription className="text-xs">support@murrannomusic.com</CardDescription>
+                  <CardDescription className="text-xs">support@murrannomusic.co</CardDescription>
                 </CardHeader>
               </Card>
 

@@ -7,6 +7,7 @@ import { TrendingUp, DollarSign, Clock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 import { useTheme } from '@/hooks/useTheme';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useUserType } from '@/hooks/useUserType';
 import { useStats } from '@/hooks/useStats';
@@ -16,11 +17,9 @@ import { DistributionStatus } from '@/components/dashboard/DistributionStatus';
 import { TopTracksCard } from '@/components/dashboard/TopTracksCard';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { NewsCarousel } from '@/components/modern/NewsCarousel';
+import { KYCStatusBadge } from '@/components/dashboard/KYCStatusBadge';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
-
-const formatCurrency = (n: number) =>
-    `₦${n.toLocaleString('en-NG', { minimumFractionDigits: 0 })}`;
 
 const getCountdown = (dateStr: string) => {
     const diff = new Date(dateStr).getTime() - Date.now();
@@ -36,6 +35,7 @@ const getCountdown = (dateStr: string) => {
 export const AgencyDashboard = () => {
     const router = useRouter();
     const { colors, isDark } = useTheme();
+    const { formatAmount: formatCurrency } = useCurrency();
     const { loading: userLoading } = useUserType();
     const { stats, loading: statsLoading } = useStats();
     const { releases } = useReleases();
@@ -66,7 +66,7 @@ export const AgencyDashboard = () => {
             accent: colors.primaryGlow,
             bg:     `${colors.primaryGlow}1f`,
         },
-    ], [stats, colors]);
+    ], [stats, colors, formatCurrency]);
 
     if (userLoading) {
         return (
@@ -83,6 +83,9 @@ export const AgencyDashboard = () => {
             <AppHeader />
 
             <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+
+                {/* KYC Badge */}
+                <KYCStatusBadge />
 
                 {/* Upload prompt */}
                 <Text style={s.uploadPrompt}>

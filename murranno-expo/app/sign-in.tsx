@@ -94,7 +94,7 @@ export default function SignIn() {
 
                         <View style={s.pwRow}>
                             <Text style={s.label}>Password</Text>
-                            <Pressable onPress={() => Alert.alert('Reset Password', 'Check your email for a reset link.')}>
+                            <Pressable onPress={() => router.push('/forgot-password' as any)}>
                                 <Text style={s.forgotText}>Forgot password?</Text>
                             </Pressable>
                         </View>

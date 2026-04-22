@@ -31,10 +31,75 @@ serve(async (req) => {
       throw new Error('Unauthorized')
     }
 
-    const { payout_method_id, amount, description, pin } = await req.json()
+    const { payout_method_id, amount, description, pin, idempotency_key, otp } = await req.json()
 
     if (!pin) {
       throw new Error('Transaction PIN is required')
+    }
+
+    // 1. Idempotency Check
+    if (idempotency_key) {
+      const { data: existingKey } = await supabaseClient
+        .from('idempotency_keys')
+        .select('*')
+        .eq('idempotency_key', idempotency_key)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existingKey) {
+        if (existingKey.status === 'completed') {
+          return new Response(
+            JSON.stringify({ success: true, data: existingKey.response_body, cached: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (existingKey.status === 'started') {
+          throw new Error('A withdrawal is already in progress for this request key.');
+        }
+      }
+
+      // Reserve the key
+      await supabaseClient.from('idempotency_keys').insert({
+        idempotency_key,
+        user_id: user.id,
+        action: 'withdrawal',
+        status: 'started'
+      });
+    }
+
+    // 2. Velocity Limit Check
+    const { data: isVelocityOk } = await supabaseClient.rpc('check_withdrawal_velocity', {
+      p_user_id: user.id,
+      p_amount: amount
+    });
+
+    if (isVelocityOk === false) {
+      throw new Error('Daily withdrawal limit exceeded (Max ₦500k per 24 hours). Please contact support for higher limits.');
+    }
+
+    // 3. OTP Check for large amounts (> 100k)
+    if (amount >= 100000) {
+      if (!otp) {
+        // Trigger OTP generation (handled by a separate function or logic)
+        // For now, we assume the user already has one or we fail
+        throw new Error('An OTP is required for withdrawals over ₦100,000.');
+      }
+      
+      const { data: validOtp } = await supabaseClient
+        .from('withdrawal_otps')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('code', otp)
+        .eq('is_used', false)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (!validOtp) {
+        throw new Error('Invalid or expired OTP.');
+      }
+
+      // Mark OTP as used
+      await supabaseClient.from('withdrawal_otps').update({ is_used: true }).eq('id', validOtp.id);
     }
 
     // Capture device metadata
@@ -231,6 +296,15 @@ serve(async (req) => {
       .eq('id', payout_method_id)
 
     console.log('Withdrawal initiated successfully:', transaction)
+
+    // Update idempotency key if present
+    if (idempotency_key) {
+      await supabaseClient
+        .from('idempotency_keys')
+        .update({ status: 'completed', response_body: transaction })
+        .eq('idempotency_key', idempotency_key)
+        .eq('user_id', user.id);
+    }
 
     return new Response(
       JSON.stringify({

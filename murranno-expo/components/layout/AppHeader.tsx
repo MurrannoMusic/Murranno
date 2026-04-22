@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react'; // useState kept for showDropdown
 import {
     View, Text, Image, StyleSheet, Pressable, Modal,
 } from 'react-native';
@@ -7,9 +7,9 @@ import { useRouter } from 'expo-router';
 
 import { useTheme } from '@/hooks/useTheme';
 import { useThemeContext } from '@/contexts/ThemeContext';
+import { useCurrency, Currency } from '@/contexts/CurrencyContext';
+import { useArtistProfile } from '@/hooks/useArtistProfile';
 import { supabase } from '@/integrations/supabase/client';
-
-type Currency = 'NGN' | 'USD';
 
 interface AppHeaderProps {
     /** Show the NGN/USD currency toggle */
@@ -22,13 +22,24 @@ export const AppHeader = ({ showCurrencyToggle = true }: AppHeaderProps) => {
     const { themeMode, setThemeMode } = useThemeContext();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
-    const [currency, setCurrency]     = useState<Currency>('NGN');
+    const { currency, setCurrency } = useCurrency();
     const [showDropdown, setShowDropdown] = useState(false);
+    const { profile } = useArtistProfile();
 
     const handleLogout = async () => {
         setShowDropdown(false);
         await supabase.auth.signOut();
         router.replace('/sign-in' as any);
+    };
+
+    const getInitials = (name: string) => {
+        if (!name) return 'MU';
+        return name
+            .split(' ')
+            .map((n) => n[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
     };
 
     return (
@@ -60,7 +71,11 @@ export const AppHeader = ({ showCurrencyToggle = true }: AppHeaderProps) => {
 
                 {/* Avatar / Dropdown trigger */}
                 <Pressable style={s.avatar} onPress={() => setShowDropdown(true)}>
-                    <Text style={s.avatarText}>MU</Text>
+                    {profile?.profile_image ? (
+                        <Image source={{ uri: profile.profile_image }} style={s.avatarImg} />
+                    ) : (
+                        <Text style={s.avatarText}>{getInitials(profile?.stage_name || 'Murranno User')}</Text>
+                    )}
                 </Pressable>
             </View>
 
@@ -73,7 +88,7 @@ export const AppHeader = ({ showCurrencyToggle = true }: AppHeaderProps) => {
             >
                 <Pressable style={s.overlay} onPress={() => setShowDropdown(false)}>
                     <View style={s.dropdown}>
-                        <Text style={s.dropdownName}>Murranno Music</Text>
+                        <Text style={s.dropdownName}>{profile?.stage_name || 'Murranno Music'}</Text>
                         <View style={s.dropdownDivider} />
 
                         {[
@@ -158,7 +173,9 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             width: 36, height: 36, borderRadius: 18,
             backgroundColor: colors.primaryGlow,
             justifyContent: 'center', alignItems: 'center',
+            overflow: 'hidden',
         },
+        avatarImg: { width: '100%', height: '100%' },
         avatarText: { fontSize: 13, fontWeight: '800', color: '#fff' },
 
         // Dropdown

@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Home, BarChart2, Music2, DollarSign, Upload } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function AppLayout() {
     const { colors } = useTheme();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
     useEffect(() => {
         // Guard: redirect to sign-in if no session
@@ -29,8 +31,8 @@ export default function AppLayout() {
                     backgroundColor: colors.tabBar,
                     borderTopColor: colors.tabBarBorder,
                     borderTopWidth: 1,
-                    height: 60,
-                    paddingBottom: 8,
+                    height: 60 + insets.bottom,
+                    paddingBottom: insets.bottom || 8,
                     paddingTop: 6,
                 },
                 tabBarActiveTintColor:   colors.tabIconSelected,
@@ -86,8 +88,11 @@ export default function AppLayout() {
             <Tabs.Screen name="account"    options={{ href: null }} />
             <Tabs.Screen name="support"    options={{ href: null }} />
             <Tabs.Screen name="faq"        options={{ href: null }} />
-            <Tabs.Screen name="privacy"    options={{ href: null }} />
-            <Tabs.Screen name="terms"      options={{ href: null }} />
+            <Tabs.Screen name="privacy"        options={{ href: null }} />
+            <Tabs.Screen name="terms"          options={{ href: null }} />
+            <Tabs.Screen name="campaigns"      options={{ href: null }} />
+            <Tabs.Screen name="campaigns/[id]" options={{ href: null }} />
+            <Tabs.Screen name="subscriptions"  options={{ href: null }} />
         </Tabs>
     );
 }

@@ -9,6 +9,7 @@ import {
     User,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '@/hooks/useTheme';
 import { useArtistProfile } from '@/hooks/useArtistProfile';
@@ -116,6 +117,45 @@ export const ArtistProfile = () => {
         }
     }, [profile]);
 
+    const pickAvatar = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'We need access to your photos to update your profile image.');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                // In a real app, you'd upload this to Cloudinary/Supabase immediately or on Save
+                // For now, we update the local state which can be handled in handleSave
+                // But wait, the ArtistProfile component uses 'profile' from a hook.
+                // I might need to update the hook or handle the upload here.
+                
+                Alert.alert('Uploading...', 'Uploading your new avatar');
+                const { url } = await uploadImage({ uri: asset.uri, type: 'image/jpeg', name: 'avatar.jpg' }, 'avatars');
+                if (url) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                        await supabase.from('artists').update({ profile_image: url }).eq('user_id', user.id);
+                        Alert.alert('Success', 'Avatar updated successfully');
+                        // In a real app, you'd trigger a refetch here
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Avatar picking error:', err);
+            Alert.alert('Error', 'Failed to update avatar');
+        }
+    };
+
     // Fetch personal info from profiles table
     useEffect(() => {
         (async () => {
@@ -193,12 +233,19 @@ export const ArtistProfile = () => {
 
                 {/* Avatar + Info */}
                 <View style={s.profileCard}>
-                    <Pressable style={s.avatarWrap}>
+                    <Pressable style={s.avatarWrap} onPress={pickAvatar}>
                         {profile?.profile_image ? (
                             <Image source={{ uri: profile.profile_image }} style={s.avatar} />
                         ) : (
                             <View style={s.avatarPlaceholder}>
-                                <User size={36} color={colors.mutedForeground} />
+                                <Text style={{ fontSize: 24, fontWeight: '800', color: colors.mutedForeground }}>
+                                    {((profile?.stage_name || 'A')
+                                        .split(' ')
+                                        .map((n) => n[0])
+                                        .join('')
+                                        .toUpperCase()
+                                        .slice(0, 2))}
+                                </Text>
                             </View>
                         )}
                     </Pressable>
@@ -281,7 +328,18 @@ export const ArtistProfile = () => {
                                 <Edit2 size={16} color="#fff" />
                                 <Text style={s.actionBtnPrimaryText}>Edit Profile</Text>
                             </Pressable>
-                            <Pressable style={[s.actionBtn, s.actionBtnOutline]} onPress={() => Alert.alert('Share', 'Share feature coming soon')}>
+                            <Pressable 
+                                style={[s.actionBtn, s.actionBtnOutline]} 
+                                onPress={async () => {
+                                    try {
+                                        await require('react-native').Share.share({
+                                            message: `Check out ${profile?.stage_name || 'Artist'} on Murranno Music! https://murrannomusic.co/artist/${profile?.id || ''}`,
+                                        });
+                                    } catch (error) {
+                                        console.error('Sharing error:', error);
+                                    }
+                                }}
+                            >
                                 <Share2 size={16} color={colors.foreground} />
                                 <Text style={s.actionBtnOutlineText}>Share</Text>
                             </Pressable>

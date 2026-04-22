@@ -47,7 +47,18 @@ export const AccountScreen = () => {
                     ) : (
                         <>
                             <View style={s.avatarCircle}>
-                                <User size={28} color={colors.mutedForeground} />
+                                {profile?.profile_image ? (
+                                    <Image source={{ uri: profile.profile_image }} style={s.avatarImg} />
+                                ) : (
+                                    <Text style={s.avatarInitials}>
+                                        {((profile?.stage_name || 'M')
+                                            .split(' ')
+                                            .map((n) => n[0])
+                                            .join('')
+                                            .toUpperCase()
+                                            .slice(0, 2))}
+                                    </Text>
+                                )}
                             </View>
                             <View style={s.profileInfo}>
                                 <Text style={s.profileName}>{displayName}</Text>
@@ -108,7 +119,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
             justifyContent: 'center', alignItems: 'center',
             borderWidth: 1, borderColor: colors.border,
+            overflow: 'hidden',
         },
+        avatarImg: { width: '100%', height: '100%' },
+        avatarInitials: { fontSize: 20, fontWeight: '800', color: colors.mutedForeground },
         profileInfo:  { flex: 1, gap: 2 },
         profileName:  { fontSize: 16, fontWeight: '700', color: colors.foreground },
         artistBadge:  { fontSize: 11, fontWeight: '700', color: colors.primaryGlow, letterSpacing: 0.6 },

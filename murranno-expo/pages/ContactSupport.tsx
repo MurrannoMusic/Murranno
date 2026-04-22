@@ -119,7 +119,7 @@ export const ContactSupport = () => {
                         {/* Info cards */}
                         <View style={s.infoGroup}>
                             {[
-                                { Icon: Mail,           label: 'Email Support',  value: 'support@murrannomusic.com' },
+                                { Icon: Mail,           label: 'Email Support',  value: 'support@murrannomusic.co' },
                                 { Icon: MessageSquare,  label: 'Response Time',  value: 'Within 24 hours'           },
                                 { Icon: MessageSquare,  label: 'Live Chat',      value: 'Coming Soon'               },
                             ].map(({ Icon, label, value }) => (
@@ -220,16 +220,76 @@ export const ContactSupport = () => {
                         </View>
                     </>
                 ) : (
-                    /* My Tickets — empty state */
-                    <View style={s.emptyTickets}>
-                        <Inbox size={40} color={colors.mutedForeground} />
-                        <Text style={s.emptyTitle}>No tickets yet</Text>
-                        <Text style={s.emptySub}>Submit a support request and it will appear here</Text>
-                    </View>
+                    <TicketsList colors={colors} isDark={isDark} s={s} />
                 )}
 
                 <View style={{ height: 40 }} />
             </ScrollView>
+        </View>
+    );
+};
+
+// ─── Tickets List ─────────────────────────────────────────────────────────────
+const TicketsList = ({ colors, isDark, s }: { colors: any; isDark: boolean; s: any }) => {
+    const [tickets, setTickets] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        (async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+                const { data, error } = await supabase
+                    .from('support_tickets')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false });
+                if (!error) setTickets(data || []);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, []);
+
+    if (loading) return <ActivityIndicator color={colors.primaryGlow} style={{ marginTop: 40 }} />;
+
+    if (tickets.length === 0) {
+        return (
+            <View style={s.emptyTickets}>
+                <Inbox size={40} color={colors.mutedForeground} />
+                <Text style={s.emptyTitle}>No tickets yet</Text>
+                <Text style={s.emptySub}>Submit a support request and it will appear here</Text>
+            </View>
+        );
+    }
+
+    return (
+        <View style={{ gap: 10 }}>
+            {tickets.map((t) => (
+                <View key={t.id} style={{
+                    backgroundColor: colors.card,
+                    borderRadius: 14, borderWidth: 1, borderColor: colors.border,
+                    padding: 14, gap: 4,
+                }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }} numberOfLines={1}>{t.subject}</Text>
+                        <View style={{
+                            paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
+                            backgroundColor: t.status === 'open' ? `${colors.success}18` : `${colors.mutedForeground}18`,
+                        }}>
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: t.status === 'open' ? colors.success : colors.mutedForeground, textTransform: 'uppercase' }}>
+                                {t.status}
+                            </Text>
+                        </View>
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.mutedForeground }} numberOfLines={2}>{t.message}</Text>
+                    <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 4 }}>
+                        {new Date(t.created_at).toLocaleDateString()}
+                    </Text>
+                </View>
+            ))}
         </View>
     );
 };
