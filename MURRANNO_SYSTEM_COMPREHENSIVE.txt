@@ -213,19 +213,83 @@ B. BREAKDOWN CAPABILITIES
 7. EDGE FUNCTIONS: THE PLATFORM "BRAIN"
 -------------------------------------------------------------------------------
 
-All logic is executed via Supabase Edge Functions (Deno/TypeScript), which 
-provides the following benefits:
-- Security: Secrets (like Paystack/Cloudinary keys) never touch the mobile app.
-- Performance: Functions run globally in data centers close to the user.
-- Integration: Direct, secure communication with Paystack (Payments), 
-  Cloudinary (Media), and Resend (Emails).
+The Murranno platform is "Headless," meaning the logic resides in Supabase Edge 
+Functions (Deno/TypeScript) rather than the mobile app. This ensures that 
+critical business logic and secrets are never exposed to the end-user.
 
-CRITICAL FUNCTIONS:
-- paystack-initiate-withdrawal: The security gate for all payouts.
-- admin-review-withdrawal: The tool for Murranno staff to approve large sums.
-- upload-audio-cloudinary: Handles high-bandwidth music uploads.
-- get-earnings-breakdown: Aggregates millions of stream rows into simple data.
-- paystack-subscription-webhook: Automatically upgrades accounts upon payment.
+A. RUNTIME ENVIRONMENT (Deno)
+   - Sandboxing: Each function runs in a secure, isolated V8 isolate. 
+   - Zero-Trust Headers: All functions verify the 'Authorization' header 
+     against the Supabase Auth server before executing any logic.
+   - CORS Compliance: Implements strict Cross-Origin Resource Sharing (CORS) 
+     headers to ensure only the official Murranno app can call these APIs.
+
+B. WITHDRAWAL SECURITY DEEP DIVE (`paystack-initiate-withdrawal`)
+   This is the most complex function, employing a 7-layer validation handshake:
+   1. Authorization: Verifies the JWT and extracts the `user_id`.
+   2. Idempotency: Checks the request key to prevent duplicate transfers.
+   3. PIN Hashing: Fetches the stored Bcrypt hash and verifies the 4-digit PIN.
+   4. Velocity Check: Calls a database RPC to check the ₦500,000 daily limit.
+   5. OTP Gating: For amounts >₦100,000, it verifies a one-time code.
+   6. Anomaly Detection: Compares current IP/User-Agent with the user's 
+      successful history.
+   7. Atomic Transaction:
+      - Inserts a row into `withdrawal_transactions`.
+      - Deducts from `available_balance` and adds to `pending_balance` in a 
+        single database operation.
+
+C. ADMIN CONTROL DEEP DIVE (`admin-review-withdrawal`)
+   Allows Murranno staff to manage the financial queue safely:
+   - Admin Verification: Calls the `has_admin_role` RPC. Access is denied if the 
+     staff member's ID is not in the `user_roles` table with 'admin' tier.
+   - Service Role Elevation: The function uses the `SERVICE_ROLE_KEY` to 
+     act as a "Superuser," allowing it to modify balances and bypass RLS for 
+     reconciliation.
+   - Payout Rejection & Refund: If rejected, the function calls the 
+     `refund_withdrawal_to_wallet` RPC, which atomically reverses the 
+     earlier deduction.
+
+D. MEDIA PROCESSING & SIGNED UPLOADS
+   - `upload-audio-cloudinary`: 
+     1. Receives audio file via FormData.
+     2. Generates a cryptographic SHA-1 signature using the Cloudinary API 
+        Secret (which never leaves the server).
+     3. Converts the file to a Data URI using memory-efficient chunking.
+     4. Uploads to a specific Cloudinary folder with the signed signature.
+     5. Returns the secure URL to the mobile app.
+   - This ensures that only authenticated Murranno users can upload to your 
+     Cloudinary storage.
+
+E. WEBHOOK & FULFILLMENT SYSTEMS
+   - `paystack-subscription-webhook`:
+     1. Receives event from Paystack (e.g., `subscription.create`).
+     2. Verifies the `x-paystack-signature` to ensure the request is actually 
+        from Paystack.
+     3. Parses the event data and updates the corresponding artist's 
+        subscription tier and metadata in the database.
+   - `paystack-campaign-payment-webhook`:
+     1. Verifies the payment for music promotion campaigns.
+     2. Upon success, moves the campaign status from 'Pending' to 'Active'.
+
+F. DATA AGGREGATION (`get-wallet-balance` / `get-wallet-transactions`)
+   - High Performance: These functions use optimized SELECT queries to fetch 
+     ledger data.
+   - Dynamic Initialization: `get-wallet-balance` detects if a user is new 
+     and automatically initializes their wallet record with zero balances, 
+     preventing "Null" errors in the UI.
+
+-------------------------------------------------------------------------------
+8. INFRASTRUCTURE & SCALABILITY
+-------------------------------------------------------------------------------
+
+- Geographic Proximity: Edge Functions run on "Edge Nodes" (data centers 
+  closest to the user), ensuring sub-millisecond response times for 
+  Nigerian artists.
+- Scaling: The serverless architecture automatically scales to handle 
+  thousands of concurrent uploads or withdrawal requests without 
+  latency spikes.
+- Monitoring: All function executions, errors, and Paystack API responses 
+  are logged and monitored for real-time security auditing.
 
 ===============================================================================
 END OF SPECIFICATION
