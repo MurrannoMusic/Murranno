@@ -62,7 +62,36 @@ The actual money resides in secure financial institutions and payment gateways:
 
 ---
 
-## 6. Technical Stack
+## 6. Deep Dive into Edge Functions
+The Edge Functions (Deno/TypeScript) act as the "Intelligence Layer" of the system, bridging the mobile client and secure financial gateways.
+
+### A. Withdrawal Initiation (`paystack-initiate-withdrawal`)
+This is the most critical function in the system. It follows a strict 7-layer validation handshake:
+1.  **Identity**: Validates user JWT and fetches `transaction_pin_hash`.
+2.  **Idempotency**: Verifies the unique `idempotency_key` hasn't been used in the last 24 hours.
+3.  **PIN Verification**: Securely compares the user's 4-digit PIN using `bcrypt`.
+4.  **Velocity Check**: Calls a database RPC to ensure the ₦500k daily withdrawal limit hasn't been exceeded.
+5.  **OTP Gating**: For amounts > ₦100,000, it verifies a one-time code sent to the artist's email.
+6.  **Anomaly Detection**: Captures IP and User-Agent; flags mismatches from the user's last successful withdrawal.
+7.  **Tiered Settlement**: Triggers instant Paystack transfers for Tier 1 (< 5k), schedules Tier 2 (5k-50k), and flags Tier 3 (> 50k) for manual review.
+
+### B. Admin Review System (`admin-review-withdrawal`)
+Handles the resolution of Tier 3 and Flagged transactions.
+- **Role Check**: Calls `has_admin_role` to prevent unauthorized access.
+- **Service Role Bypass**: Uses the `SERVICE_ROLE_KEY` to perform atomic balance refunds if a withdrawal is rejected.
+- **Auditing**: Records every admin decision, timestamp, and metadata in `admin_audit_logs`.
+
+### C. Payout Infrastructure
+- **`paystack-resolve-account`**: Validates bank account numbers against bank databases in real-time to prevent misdirected funds.
+- **`paystack-create-recipient`**: Creates a permanent "Transfer Recipient" on Paystack, allowing Murranno to store a `recipient_code` instead of sensitive bank details.
+
+### D. Automated Settlement (Webhooks)
+- **Subscription Webhook**: Automatically upgrades user accounts and updates the `subscriptions` table upon successful Paystack billing.
+- **Campaign Webhook**: Verifies payments for music promotions and triggers the campaign lifecycle in the database.
+
+---
+
+## 7. Technical Stack
 - **Backend**: Supabase Edge Functions (Deno/TypeScript).
 - **Database**: PostgreSQL with `pgcrypto` for hashing and custom triggers.
 - **Gateway**: Paystack (Transfers, Recipients, Webhooks).
