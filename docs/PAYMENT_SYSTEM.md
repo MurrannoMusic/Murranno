@@ -60,34 +60,36 @@ The actual money resides in secure financial institutions and payment gateways:
 - **Audit Logs**: Every admin action (approval, rejection, or flagging) is logged with a timestamp and IP address.
 - **Refund Logic**: Rejection of a withdrawal automatically triggers a secure refund RPC, returning funds to the user's `available_balance` safely.
 
----
-
 ## 6. Deep Dive into Edge Functions
-The Edge Functions (Deno/TypeScript) act as the "Intelligence Layer" of the system, bridging the mobile client and secure financial gateways.
+The Murranno Edge Functions are the "brain" of the platform, handling everything from secure payments to complex media processing. They are written in TypeScript and run on Deno, allowing them to be fast, secure, and easily integrated with external APIs.
 
-### A. Withdrawal Initiation (`paystack-initiate-withdrawal`)
-This is the most critical function in the system. It follows a strict 7-layer validation handshake:
-1.  **Identity**: Validates user JWT and fetches `transaction_pin_hash`.
-2.  **Idempotency**: Verifies the unique `idempotency_key` hasn't been used in the last 24 hours.
-3.  **PIN Verification**: Securely compares the user's 4-digit PIN using `bcrypt`.
-4.  **Velocity Check**: Calls a database RPC to ensure the ₦500k daily withdrawal limit hasn't been exceeded.
-5.  **OTP Gating**: For amounts > ₦100,000, it verifies a one-time code sent to the artist's email.
-6.  **Anomaly Detection**: Captures IP and User-Agent; flags mismatches from the user's last successful withdrawal.
-7.  **Tiered Settlement**: Triggers instant Paystack transfers for Tier 1 (< 5k), schedules Tier 2 (5k-50k), and flags Tier 3 (> 50k) for manual review.
+### 1. Withdrawal Security (`paystack-initiate-withdrawal`)
+This is one of the most sophisticated functions in the system. It doesn't just "send money"; it runs a full security check first:
+- **PIN Verification**: It uses `bcrypt` to securely verify the artist's Transaction PIN.
+- **Idempotency**: Verifies the unique `idempotency_key` hasn't been used in the last 24 hours to prevent duplicate payouts.
+- **Anomaly Detection**: It captures the user's IP address and device info (User-Agent). If they don't match the last successful withdrawal, the transaction is flagged as "anomalous."
+- **Tiered Risk Management**:
+    - **Tier 1 (< 5,000 NGN)**: Instant transfer via Paystack.
+    - **Tier 2 (5,000 - 50,000 NGN)**: 12-hour cooling-off period (status set to `pending_delay`).
+    - **Tier 3 (> 50,000 NGN)**: Manual admin review required (status set to `pending_review`).
+- **High-Value Gating**: Withdrawals over ₦100,000 require a 6-digit OTP verified in real-time.
+- **Financial Integrity**: It moves funds from `available_balance` to `pending_balance` (clearing) while the transfer is processing, ensuring the same money can't be withdrawn twice.
 
-### B. Admin Review System (`admin-review-withdrawal`)
-Handles the resolution of Tier 3 and Flagged transactions.
-- **Role Check**: Calls `has_admin_role` to prevent unauthorized access.
-- **Service Role Bypass**: Uses the `SERVICE_ROLE_KEY` to perform atomic balance refunds if a withdrawal is rejected.
-- **Auditing**: Records every admin decision, timestamp, and metadata in `admin_audit_logs`.
+### 2. Wallet & Analytics (`get-wallet-balance` & `get-wallet-transactions`)
+These functions serve as the backend for the "Earnings" screen:
+- **Dynamic Creation**: If a new user logs in and doesn't have a wallet yet, `get-wallet-balance` automatically creates one with a default NGN currency.
+- **Ledger Consistency**: They pull from high-performance tables (`wallet_balance`, `withdrawal_transactions`) to ensure the user always sees an accurate, up-to-the-second balance.
 
-### C. Payout Infrastructure
-- **`paystack-resolve-account`**: Validates bank account numbers against bank databases in real-time to prevent misdirected funds.
-- **`paystack-create-recipient`**: Creates a permanent "Transfer Recipient" on Paystack, allowing Murranno to store a `recipient_code` instead of sensitive bank details.
+### 3. Media Processing (`upload-image-cloudinary` & `upload-audio-cloudinary`)
+Since music and ID documents are large, we don't store them directly in the database. These functions:
+- **Signed Uploads**: They generate a cryptographic signature using your `CLOUDINARY_API_SECRET`. This means the app can upload directly to Cloudinary securely without exposing your secrets in the mobile code.
+- **Chunked Processing**: They use memory-efficient chunking to handle large files (like high-res audio) without crashing the serverless environment.
 
-### D. Automated Settlement (Webhooks)
-- **Subscription Webhook**: Automatically upgrades user accounts and updates the `subscriptions` table upon successful Paystack billing.
-- **Campaign Webhook**: Verifies payments for music promotions and triggers the campaign lifecycle in the database.
+### 4. Third-Party Integrations (Paystack)
+A suite of `paystack-*` functions handles the complex "handshake" with the bank:
+- **`paystack-resolve-account`**: Verifies that a bank account number actually belongs to the name provided by the user.
+- **`paystack-create-recipient`**: Stores the bank details on Paystack's servers and returns a `recipient_code`.
+- **`paystack-subscription-webhook`**: Listens for payment notifications from Paystack to automatically upgrade artist accounts when they pay for a subscription.
 
 ---
 
