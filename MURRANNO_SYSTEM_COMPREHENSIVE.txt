@@ -111,7 +111,106 @@ D. ROYALTY INGESTION
       showing streams by country, platform, and date.
 
 -------------------------------------------------------------------------------
-3. EDGE FUNCTIONS: THE PLATFORM "BRAIN"
+3. SUBSCRIPTION & MONETIZATION SYSTEM
+-------------------------------------------------------------------------------
+
+Murranno uses a hybrid monetization model combining Software-as-a-Service (SaaS) 
+subscriptions and distribution commissions.
+
+A. SUBSCRIPTION TIERS
+   - Artist (Free/Basic): Standard distribution with a higher platform commission.
+   - Pro (Monthly/Yearly): Lower commission, faster distribution, and basic 
+     analytics.
+   - Label: Advanced tools for managing multiple artists under one account, 
+     custom label name on stores, and priority support.
+   - Agency: The highest tier, offering full catalog management, bulk uploads, 
+     and dedicated account management.
+
+B. PAYMENT LIFECYCLE
+   1. Initialization: The app calls `paystack-initialize-subscription`. This 
+      sets up a transaction on Paystack and returns a payment URL.
+   2. Payment: The artist pays via Card, Bank Transfer, or USSD.
+   3. Webhook Fulfillment: Paystack sends a secure POST request to 
+      `paystack-subscription-webhook`. The function:
+      - Validates the Paystack signature to prevent spoofing.
+      - Identifies the user via metadata.
+      - Updates the `subscriptions` table with the new tier and expiry date.
+      - Sends a success notification to the artist.
+
+C. REVENUE MODEL
+   - Distribution Commission: Murranno retains a small percentage (e.g., 10-30% 
+     depending on tier) of all royalties collected from DSPs.
+   - Subscription Fees: Recurring revenue from Pro, Label, and Agency users.
+   - Promotion Fees: One-time payments for marketing campaigns.
+
+-------------------------------------------------------------------------------
+4. CAMPAIGN & PROMOTION ENGINE
+-------------------------------------------------------------------------------
+
+Artists can use their earnings or external payments to boost their music 
+visibility through the integrated campaign manager.
+
+A. PROMOTION TYPES
+   - TikTok Viral Push: Coordination with influencers to create sound-based 
+     challenges.
+   - Spotify Playlist Pitching: Direct pitching to editorial and independent 
+     curators.
+   - Instagram Reels Promo: Targeted visual content promotion.
+
+B. BUDGET & METRICS TRACKING
+   - Real-time Spend: Artists can see exactly how much of their budget has been 
+     spent in the `campaign_metrics` table.
+   - Performance Data: The system tracks Impressions, Clicks, Conversions, and 
+     Engagement rates, allowing artists to see the ROI of their marketing 
+     spend.
+
+-------------------------------------------------------------------------------
+5. AUTHENTICATION & SECURITY HARDENING
+-------------------------------------------------------------------------------
+
+A. IDENTITY MANAGEMENT (Supabase Auth)
+   - JWT (JSON Web Tokens): Every request from the mobile app is signed with a 
+     unique token that expires frequently.
+   - Row Level Security (RLS): The database itself enforces security. Even if 
+     a user manages to access the DB, they can only "SEE" and "EDIT" rows where 
+     `user_id = auth.uid()`.
+
+B. TRANSACTION PIN ARCHITECTURE
+   - Bcrypt Hashing: Transaction PINs are never stored in plain text. They are 
+     hashed using bcrypt with a high "Work Factor," making it mathematically 
+     impossible for even Murranno staff to know an artist's PIN.
+   - Cold Storage: Sensitive ID documents (NIN slips, Passports) are stored in 
+     Private Cloudinary buckets with expiring access tokens.
+
+C. MAINTENANCE & SERVICE CONTROL
+   - Maintenance Mode: Admins can toggle a global flag to pause payouts or 
+     uploads during system upgrades, preventing data corruption.
+   - Audit Logs: Every administrative action (Approving a release, Rejecting a 
+     payout, Changing a user role) is logged with the Admin ID, Timestamp, 
+     Action Type, and IP Address.
+
+-------------------------------------------------------------------------------
+6. ANALYTICS & DATA ARCHITECTURE
+-------------------------------------------------------------------------------
+
+The Analytics system turns millions of raw streaming data points into 
+actionable insights for the artist.
+
+A. DATA INGESTION
+   - The `streaming_data` table stores daily stream counts broken down by 
+     Track ID, Platform (Spotify, Apple, etc.), and Country.
+   - This data is updated as soon as DSP reports are ingested (usually daily 
+     or weekly).
+
+B. BREAKDOWN CAPABILITIES
+   - Platform Insights: See which store is generating the most revenue.
+   - Geographic Insights: Identify which countries (e.g., Nigeria, USA, UK) 
+     are the top listeners.
+   - Growth Metrics: Automated calculation of Week-over-Week (WoW) or 
+     Month-over-Month (MoM) growth.
+
+-------------------------------------------------------------------------------
+7. EDGE FUNCTIONS: THE PLATFORM "BRAIN"
 -------------------------------------------------------------------------------
 
 All logic is executed via Supabase Edge Functions (Deno/TypeScript), which 
