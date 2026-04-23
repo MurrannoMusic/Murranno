@@ -31,7 +31,14 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+.env
+.env.*
+
+# Firebase & Google Service files
+google-services.json
+
+# Verification tokens
+adi-registration.properties
 
 # typescript
 *.tsbuildinfo
