@@ -152,34 +152,6 @@ export const UploadWizard = () => {
         );
     }
 
-    // Step 1: Release Info
-    const [releaseType, setReleaseType]           = useState<ReleaseType>('Single');
-    const [releaseTitle, setReleaseTitle]         = useState('');
-    const [artistName, setArtistName]             = useState('');
-    const [primaryGenre, setPrimaryGenre]         = useState('');
-    const [secondaryGenre, setSecondaryGenre]     = useState('');
-    const [description, setDescription]           = useState('');
-    const [coverArtUri, setCoverArtUri]           = useState<string | null>(null);
-    const [showGenrePicker, setShowGenrePicker]   = useState<'primary' | 'secondary' | null>(null);
-
-    // Step 2: Tracks
-    const [tracks, setTracks] = useState<TrackItem[]>([]);
-
-    // Step 3: Distribution
-    const [releaseDate, setReleaseDate]           = useState('');
-    const [language, setLanguage]                 = useState('English');
-    const [recordingYear, setRecordingYear]       = useState(new Date().getFullYear().toString());
-    const [labelName, setLabelName]               = useState('');
-    const [isExistingRelease, setIsExistingRelease] = useState(false);
-    const [upc, setUpc]                           = useState('');
-    const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
-
-    // Step 4: Credits
-    const [globalLegalName, setGlobalLegalName]   = useState('');
-
-    // Step 5: Submit
-    const [isSubmitting, setIsSubmitting]         = useState(false);
-    const [uploadError, setUploadError]           = useState<string | null>(null);
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
