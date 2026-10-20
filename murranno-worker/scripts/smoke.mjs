@@ -418,6 +418,27 @@ check(del.data?.message === 'Account deleted successfully', 'delete-account');
 const gone = q('SELECT (SELECT COUNT(*) FROM auth_users WHERE email = ?) u, (SELECT COUNT(*) FROM profiles WHERE email = ?) p', emailB, emailB)[0];
 check(gone.u === 0 && gone.p === 0, 'user + profile removed (cascade)');
 
+section('signup squatting');
+{
+  const victim = `victim${stamp}@example.com`;
+  const before = emailCount(victim);
+  await client().auth.signUp({ email: victim, password: 'victim-pass-1' });
+  await lastEmail(victim, before);
+  // Same password again = genuine retry: password kept.
+  await client().auth.signUp({ email: victim, password: 'victim-pass-1' });
+  check(!!q('SELECT encrypted_password p FROM auth_users WHERE email = ?', victim)[0]?.p, 'same-password retry keeps the password');
+  // Someone else re-submits with their own password: it must not be adopted, and the stored one is dropped.
+  const n = emailCount(victim);
+  await client().auth.signUp({ email: victim, password: 'attacker-pass-1' });
+  const mail = await lastEmail(victim, n);
+  check(q('SELECT encrypted_password p FROM auth_users WHERE email = ?', victim)[0]?.p === null, 'contested re-signup clears the password');
+  const code = /verify your email: (\d{6})/.exec(mail)?.[1];
+  const v = await client().auth.verifyOtp({ email: victim, token: code, type: 'signup' });
+  check(!v.error && v.data.session, 'inbox owner can still confirm', v.error);
+  const attacker = await client().auth.signInWithPassword({ email: victim, password: 'attacker-pass-1' });
+  check(!!attacker.error, 'squatter’s password does not work after confirmation');
+}
+
 section('cron');
 const cron = await fetch(`${API}/cdn-cgi/local/scheduled?cron=*/15+*+*+*+*`);
 check(cron.ok, 'scheduled handler runs');

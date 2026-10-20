@@ -67,7 +67,11 @@ async function applyToken(c: Context<AppEnv>, userId: string, type: TokenType, n
   const ts = now();
   if (type === 'signup') {
     const before = await getAuthUser(d, userId);
-    await d.run('UPDATE auth_users SET email_confirmed_at = COALESCE(email_confirmed_at, ?), updated_at = ? WHERE id = ?', ts, ts, userId);
+    await d.batch([
+      d.stmt('UPDATE auth_users SET email_confirmed_at = COALESCE(email_confirmed_at, ?), updated_at = ? WHERE id = ?', ts, ts, userId),
+      // Provider logins attached before the inbox owner confirmed can't be trusted to be theirs.
+      ...(before && !before.email_confirmed_at ? [d.stmt('DELETE FROM auth_identities WHERE user_id = ?', userId)] : []),
+    ]);
     if (before && !before.email_confirmed_at) sendWelcome(c, before);
   } else if (type === 'email_change' && newEmail) {
     if (await getAuthUserByEmail(d, newEmail)) throw authError(422, 'email_exists', 'A user with this email address has already been registered');
@@ -121,9 +125,17 @@ authRoutes.post('/signup', async (c) => {
   const existing = await getAuthUserByEmail(d, email);
   if (existing?.email_confirmed_at) throw authError(422, 'user_already_exists', 'User already registered');
   if (existing) {
-    // Unconfirmed retry: refresh the password + metadata and resend the code.
-    const ts = now();
-    await d.update('auth_users', { encrypted_password: await hashSecret(password), raw_user_meta_data: meta, updated_at: ts }, 'id = ?', existing.id);
+    // Unconfirmed retry. Never adopt the new password: anyone can submit this form for any address,
+    // and whoever later confirms from the inbox would inherit it. Same password = a genuine retry, so
+    // just resend. A different one means two people claim the address: drop the password and any
+    // sessions, so the inbox owner confirms and then sets their own via "Forgot password".
+    if (!(await verifySecret(password, existing.encrypted_password))) {
+      const ts = now();
+      await d.batch([
+        d.stmt('UPDATE auth_users SET encrypted_password = NULL, updated_at = ? WHERE id = ?', ts, existing.id),
+        d.stmt('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', ts, existing.id),
+      ]);
+    }
     const u = (await getAuthUser(d, existing.id))!;
     await sendConfirmation(c, u, redirectTo);
     return c.json(await toGoTrueUser(d, u));

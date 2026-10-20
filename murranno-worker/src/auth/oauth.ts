@@ -106,12 +106,12 @@ async function findOrCreateUser(c: Context<AppEnv>, d: DB, provider: Provider, p
     return (await getAuthUser(d, identity.user_id))!;
   }
   if (!p.email) throw new Error('The provider did not share an email address');
+  // An unverified provider email proves nothing about who owns the address, so it can't create or join an account.
+  if (!p.emailVerified) throw new Error('Email not verified with provider');
   const identityData = { sub: p.sub, email: p.email, email_verified: p.emailVerified, name: p.name, avatar_url: p.avatar };
 
   const existing = await getAuthUserByEmail(d, p.email);
   if (existing) {
-    // Only link to an existing account when the provider vouches for the address.
-    if (!p.emailVerified) throw new Error('Email not verified with provider');
     const ts = now();
     // An unconfirmed account may have been registered by someone squatting on this address:
     // the provider just proved ownership, so drop that password and any sessions it created.
@@ -133,7 +133,7 @@ async function findOrCreateUser(c: Context<AppEnv>, d: DB, provider: Provider, p
     await d.insertStmt('auth_users', {
       id,
       email: p.email.toLowerCase(),
-      email_confirmed_at: p.emailVerified ? now() : null,
+      email_confirmed_at: now(),
       raw_user_meta_data: meta,
       raw_app_meta_data: { provider, providers: [provider] },
     }),
