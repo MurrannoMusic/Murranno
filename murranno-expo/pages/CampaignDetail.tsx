@@ -1,3 +1,6 @@
+import { invoke, notify, confirmAction } from '@/lib/api';
+import { CardSkeleton, EmptyState, ErrorState, StatSkeleton } from '@/components/states/StateViews';
+import { SearchX } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
@@ -33,7 +36,7 @@ export const CampaignDetailPage = () => {
     const router = useRouter();
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-    const { campaigns, loading } = useCampaigns();
+    const { campaigns, loading, error, refetch } = useCampaigns();
     const [pausing, setPausing] = useState(false);
 
     const campaign = campaigns.find((c) => c.id === id) ?? null;
@@ -41,46 +44,32 @@ export const CampaignDetailPage = () => {
     const handlePauseToggle = async () => {
         if (!campaign) return;
         const isActive = campaign.status === 'Active';
-        Alert.alert(
-            isActive ? 'Pause Campaign' : 'Resume Campaign',
-            `Are you sure you want to ${isActive ? 'pause' : 'resume'} this campaign?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: isActive ? 'Pause' : 'Resume',
-                    style: isActive ? 'destructive' : 'default',
-                    onPress: async () => {
-                        setPausing(true);
-                        const { error } = await supabase.functions.invoke('pause-campaign', {
-                            body: { campaignId: id, currentStatus: campaign.status },
-                        });
-                        setPausing(false);
-                        if (error) {
-                            Alert.alert('Error', error.message);
-                        } else {
-                            router.back();
-                        }
-                    },
-                },
-            ],
-        );
+        if (!await confirmAction(isActive ? 'Pause campaign' : 'Resume campaign', `Continue to ${isActive ? 'pause' : 'resume'} this campaign?`)) return;
+        setPausing(true);
+        try { await invoke('pause-campaign', {campaignId: id, pause: isActive}); await refetch(); }
+        catch (e: any) { notify('Campaign not updated', e.message); }
+        finally { setPausing(false); }
+
     };
 
-    if (loading) {
+    if (loading && !campaign) {
         return (
-            <View style={[s.screen, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator color={colors.primaryGlow} size="large" />
+            <View style={[s.screen, { padding: 24, paddingTop: 72, gap: 16 }]}>
+                <CardSkeleton lines={2} />
+                <StatSkeleton />
+                <CardSkeleton lines={4} />
             </View>
         );
     }
 
     if (!campaign) {
         return (
-            <View style={[s.screen, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.mutedForeground }}>Campaign not found.</Text>
-                <Pressable style={{ marginTop: 16, padding: 12 }} onPress={() => router.back()}>
-                    <Text style={{ color: colors.primaryGlow, fontWeight: '700' }}>Go back</Text>
-                </Pressable>
+            <View style={[s.screen, { justifyContent: 'center' }]}>
+                {error ? (
+                    <ErrorState error={error} title="Couldn’t load this campaign" onRetry={() => refetch()} />
+                ) : (
+                    <EmptyState icon={SearchX} title="Campaign not found" body="It may have been cancelled, or the link is wrong." action={{ label: 'Back to campaigns', onPress: () => router.replace('/app/campaigns' as any) }} />
+                )}
             </View>
         );
     }
@@ -195,23 +184,23 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     StyleSheet.create({
         screen:        { flex: 1, backgroundColor: colors.background },
         scroll:        { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, gap: 14, paddingTop: 8 },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, gap: 14, paddingTop: 8 },
 
         header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 56, paddingHorizontal: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
         headerTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground, flex: 1, textAlign: 'center' },
         backBtn:     { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
 
-        titleCard:    { borderRadius: 16, borderWidth: 1, padding: 16 },
-        campaignName: { fontSize: 18, fontWeight: '800' },
+        titleCard:    { borderRadius: 10, borderWidth: 1, padding: 16 },
+        campaignName: { fontSize: 18, fontWeight: '600' },
         statusBadge:  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
         statusText:   { fontSize: 10, fontWeight: '700', color: '#fff' },
 
         metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
         metricCard:  { width: '47.5%', borderRadius: 14, borderWidth: 1, padding: 14, alignItems: 'flex-start', gap: 4 },
-        metricValue: { fontSize: 18, fontWeight: '800' },
+        metricValue: { fontSize: 18, fontWeight: '600' },
         metricLabel: { fontSize: 11 },
 
-        section:      { borderRadius: 16, borderWidth: 1, padding: 16 },
+        section:      { borderRadius: 10, borderWidth: 1, padding: 16 },
         sectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
 
         actionBtn: { borderRadius: 14, borderWidth: 1, paddingVertical: 14, alignItems: 'center' },

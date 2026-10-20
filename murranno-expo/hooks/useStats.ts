@@ -17,6 +17,7 @@ export const useStats = () => {
     activeReleases: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchStats();
@@ -24,6 +25,7 @@ export const useStats = () => {
 
   const fetchStats = async () => {
     try {
+      setError(null);
       setLoading(true);
 
       const { data: analyticsData, error: analyticsError } = await supabase.functions.invoke('get-analytics-data', {
@@ -52,6 +54,7 @@ export const useStats = () => {
       });
 
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching stats:', error);
       Alert.alert('Error', 'Failed to load statistics');
     } finally {
@@ -83,6 +86,7 @@ export const useStats = () => {
   };
 
   return {
+    error,
     stats,
     loading,
     refetch: fetchStats,

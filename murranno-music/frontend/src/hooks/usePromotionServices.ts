@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PromotionService, PromotionCategory } from '@/types/promotion';
-import { toast } from 'sonner';
 
 export const usePromotionServices = (category?: PromotionCategory) => {
   const [services, setServices] = useState<PromotionService[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchServices();
@@ -13,6 +13,7 @@ export const usePromotionServices = (category?: PromotionCategory) => {
 
   const fetchServices = async () => {
     try {
+      setError(null);
       setLoading(true);
       let query = supabase
         .from('promotion_services')
@@ -47,8 +48,8 @@ export const usePromotionServices = (category?: PromotionCategory) => {
 
       setServices(formattedServices);
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching services:', error);
-      toast.error('Failed to load promotional services');
     } finally {
       setLoading(false);
     }
@@ -65,6 +66,7 @@ export const usePromotionServices = (category?: PromotionCategory) => {
   ];
 
   return {
+    error,
     services,
     loading,
     categories,

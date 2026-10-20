@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/forms/PasswordInput';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +14,7 @@ interface ChangeEmailDialogProps {
 
 export const ChangeEmailDialog = ({ open, onOpenChange }: ChangeEmailDialogProps) => {
   const [newEmail, setNewEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleChangeEmail = async () => {
@@ -23,12 +25,14 @@ export const ChangeEmailDialog = ({ open, onOpenChange }: ChangeEmailDialogProps
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      // current_password is checked by the API (not part of supabase-js' types)
+      const { error } = await supabase.auth.updateUser({ email: newEmail, current_password: currentPassword } as Parameters<typeof supabase.auth.updateUser>[0]);
       
       if (error) throw error;
       
       toast.success('Check your new email for a confirmation link');
       setNewEmail('');
+      setCurrentPassword('');
       onOpenChange(false);
     } catch (error: any) {
       toast.error(error.message || 'Failed to change email');
@@ -55,6 +59,17 @@ export const ChangeEmailDialog = ({ open, onOpenChange }: ChangeEmailDialogProps
               placeholder="your.new@email.com"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email-current-password">Current Password</Label>
+            <PasswordInput
+              id="email-current-password"
+              autoComplete="current-password"
+              placeholder="Leave empty if you only sign in with Google or Apple"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
               disabled={loading}
             />
           </div>

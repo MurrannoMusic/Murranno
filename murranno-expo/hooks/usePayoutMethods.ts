@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import {notify, errorMessage, confirmAction} from '@/lib/api';
+import {useFocusEffect} from '@react-navigation/native';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface PayoutMethod {
@@ -19,21 +21,23 @@ export interface PayoutMethod {
 export const usePayoutMethods = () => {
   const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string|null>(null);
 
-  const fetchPayoutMethods = async () => {
+  const fetchPayoutMethods = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoading(true); setError(null);
       const { data, error } = await supabase.functions.invoke('get-payout-methods');
       if (error) throw error;
       if (data?.success) setPayoutMethods(data.payoutMethods || []);
     } catch (err) {
-      console.error('usePayoutMethods error:', err);
+      setError(await errorMessage(err));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const deleteMethod = async (id: string) => {
+    if (!await confirmAction('Remove payout account', 'Remove this bank account? Existing withdrawals keep their original destination.')) return;
     try {
       const { data, error } = await supabase.functions.invoke('delete-payout-method', {
         body: { payoutMethodId: id },
@@ -41,7 +45,7 @@ export const usePayoutMethods = () => {
       if (error) throw error;
       if (data?.success) await fetchPayoutMethods();
     } catch (err) {
-      console.error('deleteMethod error:', err);
+      notify('Account not removed', await errorMessage(err));
     }
   };
 
@@ -53,13 +57,11 @@ export const usePayoutMethods = () => {
       if (error) throw error;
       if (data?.success) await fetchPayoutMethods();
     } catch (err) {
-      console.error('setPrimary error:', err);
+      notify('Primary account not changed', await errorMessage(err));
     }
   };
 
-  useEffect(() => {
-    fetchPayoutMethods();
-  }, []);
+  useFocusEffect(useCallback(() => { void fetchPayoutMethods(); }, [fetchPayoutMethods]));
 
-  return { payoutMethods, loading, deleteMethod, setPrimary, refetch: fetchPayoutMethods };
+  return { payoutMethods, loading, error, deleteMethod, setPrimary, refetch: fetchPayoutMethods };
 };

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme as useSystemScheme } from 'react-native';
 
@@ -19,20 +19,23 @@ const ThemeContext = createContext<ThemeContextValue>({
 const STORAGE_KEY = '@murranno/themeMode';
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    const systemScheme = useSystemScheme() ?? 'dark';
+    const deviceScheme = useSystemScheme();
+    const systemScheme = deviceScheme === 'light' ? 'light' : 'dark';
     const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
+    const userSelectedTheme = useRef(false);
 
     useEffect(() => {
         AsyncStorage.getItem(STORAGE_KEY).then((val) => {
-            if (val === 'light' || val === 'dark' || val === 'system') {
+            if (!userSelectedTheme.current && (val === 'light' || val === 'dark' || val === 'system')) {
                 setThemeModeState(val as ThemeMode);
             }
-        });
+        }).catch(() => {});
     }, []);
 
     const setThemeMode = (mode: ThemeMode) => {
+        userSelectedTheme.current = true;
         setThemeModeState(mode);
-        AsyncStorage.setItem(STORAGE_KEY, mode);
+        AsyncStorage.setItem(STORAGE_KEY, mode).catch(() => {});
     };
 
     const resolvedScheme: 'light' | 'dark' =

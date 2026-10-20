@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SlidersHorizontal, Share2, ExternalLink, Music, DollarSign, Play, Copy } from 'lucide-react';
+import { SlidersHorizontal, Share2, ExternalLink, Music, DollarSign, Play, Copy, SearchX } from 'lucide-react';
 import { CloudinaryImage } from '@/components/ui/cloudinary-image';
 import { useReleaseDetail } from '@/hooks/useReleaseDetail';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState, ErrorState } from '@/components/states/StateViews';
 import { useShare } from '@/hooks/useShare';
 import { useClipboard } from '@/hooks/useClipboard';
 import { TwoTierHeader } from '@/components/layout/TwoTierHeader';
@@ -50,7 +51,7 @@ const MetadataRow = ({ label, value }: MetadataRowProps) => (
 const ReleaseDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { release, loading } = useReleaseDetail(id);
+  const { release, loading, error, refetch } = useReleaseDetail(id);
   const { shareUrl } = useShare();
   const { copySmartlink } = useClipboard();
 
@@ -68,15 +69,16 @@ const ReleaseDetail = () => {
     );
   }
 
-  if (!release) {
+  if (error || !release) {
     return (
       <div className="min-h-screen bg-gradient-dark mobile-safe-bottom">
         <TwoTierHeader title="RELEASE DETAILS" backTo="/app/releases" />
-        <div className="mobile-container pt-[120px] pb-6 text-center">
-          <p className="text-muted-foreground">This release could not be found.</p>
-          <Button onClick={() => navigate('/app/releases')} className="mt-4">
-            Back to Releases
-          </Button>
+        <div className="mobile-container pt-[120px] pb-6">
+          {error ? (
+            <ErrorState error={error} title="Couldn’t load this release" onRetry={refetch} />
+          ) : (
+            <EmptyState icon={SearchX} title="Release not found" body="It may have been deleted, or the link is wrong." action={{ label: 'Back to your music', to: '/app/releases' }} />
+          )}
         </div>
       </div>
     );
@@ -97,18 +99,7 @@ const ReleaseDetail = () => {
   };
 
 
-  const getPublicIdFromUrl = (url: string | null) => {
-    if (!url || !url.includes('cloudinary.com')) return null;
-    const parts = url.split('/upload/');
-    if (parts.length > 1) {
-      const pathParts = parts[1].split('/');
-      const publicIdParts = pathParts.filter(p => !p.startsWith('v'));
-      return publicIdParts.join('/').replace(/\.[^/.]+$/, '');
-    }
-    return null;
-  };
-
-  const coverArtPublicId = getPublicIdFromUrl(release.cover_art_url);
+  const coverArtPublicId = release.cover_art_url;
 
   return (
     <div className="min-h-screen bg-gradient-dark mobile-safe-bottom">

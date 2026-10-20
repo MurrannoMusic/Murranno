@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { SuccessState, friendlyError } from '@/components/states/StateViews';
+import { FormError } from '@/components/forms/FormField';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
     Pressable, ActivityIndicator, TextInput, Image,
-    Alert, Switch,
+    Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import {
-    Upload, Music, Image as ImageIcon, Plus, Trash2,
-    Check, AlertCircle, ChevronDown, ChevronUp, X,
+    Music, Image as ImageIcon, Plus, Trash2,
+    Check, AlertCircle, ChevronDown, X,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
@@ -17,6 +19,8 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload';
 import { supabase } from '@/integrations/supabase/client';
 import { useArtistProfile } from '@/hooks/useArtistProfile';
+import { FormDialog } from '@/components/ui/FormDialog';
+import { invoke } from '@/lib/api';
 import { KYCGate } from '@/components/kyc/KYCGate';
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -42,6 +46,7 @@ interface TrackItem {
     uri: string | null;
     name: string;
     size: number | null;
+    mimeType: string;
     title: string;
     duration: number | null;
     featuredArtists: string[];
@@ -56,39 +61,13 @@ interface TrackItem {
 const StepIndicator = ({
     step, total, colors,
 }: { step: number; total: number; colors: any }) => (
-    <View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-            {Array.from({ length: total }, (_, i) => i + 1).map((n) => (
-                <View
-                    key={n}
-                    style={{
-                        width: 28, height: 28, borderRadius: 14,
-                        justifyContent: 'center', alignItems: 'center',
-                        backgroundColor:
-                            n === step ? colors.primaryGlow :
-                            n < step  ? `${colors.primaryGlow}40` :
-                            colors.background,
-                        borderWidth: 1,
-                        borderColor: n <= step ? colors.primaryGlow : colors.border,
-                    }}
-                >
-                    <Text style={{
-                        fontSize: 11, fontWeight: '700',
-                        color: n === step ? '#fff' : n < step ? colors.primaryGlow : colors.mutedForeground,
-                    }}>
-                        {n}
-                    </Text>
-                </View>
-            ))}
+    <View style={{ gap: 12 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>Step {step} of {total}</Text>
+            <Text style={{ color: colors.foreground, fontSize: 13 }}>{['Release details', 'Tracks', 'Distribution', 'Credits', 'Review'][step - 1]}</Text>
         </View>
-        {/* Progress bar */}
-        <View style={{ height: 2, backgroundColor: colors.border, borderRadius: 1, overflow: 'hidden' }}>
-            <View style={{
-                height: '100%',
-                width: `${((step - 1) / (total - 1)) * 100}%`,
-                backgroundColor: colors.primaryGlow,
-                borderRadius: 1,
-            }} />
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+            {Array.from({ length: total }, (_, i) => <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i < step ? colors.primary : colors.border }} />)}
         </View>
     </View>
 );
@@ -99,8 +78,10 @@ export const UploadWizard = () => {
     const router = useRouter();
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-    const { uploadImage, uploadAudio, uploading, progress } = useCloudinaryUpload();
+    const { uploadImage, uploadAudio, uploading } = useCloudinaryUpload();
     const { profile, loading: profileLoading } = useArtistProfile();
+
+    useEffect(() => { if (profile?.stage_name) setArtistName(name => name || profile.stage_name); }, [profile?.stage_name]);
 
     // Wizard state
     const [step, setStep] = useState(1);
@@ -134,6 +115,12 @@ export const UploadWizard = () => {
     // Step 5: Submit
     const [isSubmitting, setIsSubmitting]         = useState(false);
     const [uploadError, setUploadError]           = useState<string | null>(null);
+    const [stepError, setStepError]               = useState('');
+    const [submitted, setSubmitted]               = useState(false);
+
+    const [credit, setCredit] = useState<{id: string; field: 'featuredArtists' | 'producers'} | null>(null);
+    const [creditName, setCreditName] = useState('');
+    const [coverFile, setCoverFile] = useState({type: 'image/jpeg', name: 'cover.jpg'});
 
     if (profileLoading) {
         return (
@@ -177,6 +164,7 @@ export const UploadWizard = () => {
                     uri: asset.uri,
                     name: asset.name,
                     size: asset.size ?? null,
+                    mimeType: asset.mimeType || (asset.name.toLowerCase().endsWith('.flac') ? 'audio/flac' : 'audio/wav'),
                     title: asset.name.replace(/\.[^/.]+$/, ""), // Remove extension
                     duration: null,
                     featuredArtists: [],
@@ -189,7 +177,7 @@ export const UploadWizard = () => {
             }
         } catch (err) {
             console.error('Document picking error:', err);
-            Alert.alert('Error', 'Failed to pick audio file');
+            setStepError('Failed to pick audio file');
         }
     };
 
@@ -197,7 +185,7 @@ export const UploadWizard = () => {
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'We need access to your photos to upload cover art.');
+                setStepError('Photo access is off. Allow Murranno to use your photos in your phone’s Settings to add cover art.');
                 return;
             }
 
@@ -209,73 +197,70 @@ export const UploadWizard = () => {
             });
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
-                setCoverArtUri(result.assets[0].uri);
+                const asset = result.assets[0];
+                setCoverArtUri(asset.uri);
+                setCoverFile({type: asset.mimeType || 'image/jpeg', name: asset.fileName || 'cover.jpg'});
             }
         } catch (err) {
             console.error('Image picking error:', err);
-            Alert.alert('Error', 'Failed to pick cover art');
+            setStepError('Failed to pick cover art');
         }
     };
 
     const handleNext = () => {
         if (step === 1) {
             if (!releaseTitle.trim()) {
-                Alert.alert('Missing Info', 'Please enter a release title');
+                setStepError('Please enter a release title');
                 return;
             }
             if (!artistName.trim()) {
-                Alert.alert('Missing Info', 'Please enter the primary artist name');
+                setStepError('Please enter the primary artist name');
                 return;
             }
             if (!primaryGenre) {
-                Alert.alert('Missing Info', 'Please select a primary genre');
+                setStepError('Please select a primary genre');
                 return;
             }
+            if (!coverArtUri) { setStepError('Choose cover artwork for your release.'); return; }
         } else if (step === 2) {
             if (tracks.length === 0) {
-                Alert.alert('Missing Tracks', 'Please add at least one track');
+                setStepError('Please add at least one track');
                 return;
             }
+            if (tracks.some(t => !t.title.trim())) { setStepError('Enter a title for each track.'); return; }
+            if (releaseType === 'Single' && tracks.length !== 1) { setStepError('A single must contain one track. Choose EP or Album for multiple tracks.'); return; }
         } else if (step === 3) {
             if (!releaseDate.trim()) {
-                Alert.alert('Missing Info', 'Please enter a release date');
+                setStepError('Please enter a release date');
                 return;
             }
-        }
+            const parsed = new Date(releaseDate);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(releaseDate) || isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== releaseDate) { setStepError('Use a valid date in YYYY-MM-DD format.'); return; }
+            if (isExistingRelease && !/^\d{12,13}$/.test(upc)) { setStepError('Enter the existing 12 or 13 digit UPC.'); return; }
+            if (!selectedPlatforms.length) { setStepError('Choose at least one platform.'); return; }
+        } else if (step === 4 && tracks.some(t => !(t.legalName || globalLegalName).trim() || !t.duration || t.duration <= 0)) { setStepError('Enter the duration and legal songwriter name for each track.'); return; }
+        setStepError('');
         setStep((p) => Math.min(p + 1, TOTAL_STEPS));
     };
 
-    const handleBack = () => setStep((p) => Math.max(p - 1, 1));
+    const handleBack = () => { setStepError(''); setStep((p) => Math.max(p - 1, 1)); };
 
     const handleSubmit = async () => {
         if (tracks.length === 0) {
-            Alert.alert('Error', 'Please add at least one track');
+            setStepError('Please add at least one track');
             return;
         }
         setIsSubmitting(true);
         setUploadError(null);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Not authenticated');
-
-            let { data: artist } = await supabase
-                .from('artists')
-                .select('id')
-                .eq('user_id', user.id)
-                .maybeSingle();
-
-            if (!artist) {
-                const { data: newArtist, error: ae } = await supabase
-                    .from('artists')
-                    .insert([{ user_id: user.id, stage_name: artistName }])
-                    .select('id')
-                    .single();
-                if (ae) throw ae;
-                artist = newArtist;
-            }
+            if (!user) throw new Error('Please sign in again.');
 
             const releaseData = {
                 title: releaseTitle,
+                artistName,
+                description,
+                secondary_genre: secondaryGenre || null,
                 type: releaseType,
                 releaseDate,
                 genre: primaryGenre,
@@ -295,6 +280,7 @@ export const UploadWizard = () => {
                 producers: t.producers,
                 songwriters: [t.legalName || globalLegalName],
                 trackType: t.trackType,
+                explicit_content: t.trackType === 'explicit',
                 lyrics: t.lyrics,
                 songwriter_legal_names: [t.legalName || globalLegalName],
             }));
@@ -303,13 +289,13 @@ export const UploadWizard = () => {
             let remoteCoverArtUrl = null;
             if (coverArtUri) {
                 try {
-                    const res = await uploadImage({ 
-                        uri: coverArtUri, 
-                        type: 'image/jpeg', 
-                        name: `cover_${Date.now()}.jpg` 
+                    const res = await uploadImage({
+                        uri: coverArtUri,
+                        type: coverFile.type,
+                        name: coverFile.name
                     }, 'cover-arts');
                     remoteCoverArtUrl = res.url;
-                } catch (e) {
+                } catch {
                     throw new Error('Failed to upload cover art');
                 }
             }
@@ -319,45 +305,33 @@ export const UploadWizard = () => {
             for (const t of tracks) {
                 if (t.uri) {
                     try {
-                        const res = await uploadAudio({ 
-                            uri: t.uri, 
-                            type: 'audio/wav', 
-                            name: t.name 
+                        const res = await uploadAudio({
+                            uri: t.uri,
+                            type: t.mimeType,
+                            name: t.name
                         }, 'audio-tracks');
                         remoteAudioFiles.push({ url: res.url });
-                    } catch (e) {
+                    } catch {
                         throw new Error(`Failed to upload track: ${t.title}`);
                     }
                 }
             }
 
             // 3. Submit to Backend
-            const { data, error } = await supabase.functions.invoke('upload-track', {
-                body: {
-                    releaseData,
-                    tracks: tracksPayload,
-                    coverArtFile: remoteCoverArtUrl ? { url: remoteCoverArtUrl } : null,
-                    audioFiles: remoteAudioFiles,
-                },
-            });
-
-            if (error) throw error;
-
-            Alert.alert('Success', `${releaseType} submitted successfully!`, [
-                { text: 'OK', onPress: () => router.replace('/app/music' as any) },
-            ]);
+            await invoke('upload-track', { releaseData, tracks: tracksPayload, coverArtFile: { url: remoteCoverArtUrl }, audioFiles: remoteAudioFiles });
+            setSubmitted(true);
         } catch (err: any) {
             console.error('Upload error:', err);
-            setUploadError(err.message || 'Failed to upload release');
-            Alert.alert('Error', err.message || 'Failed to upload release');
+            const info = friendlyError(err);
+            setUploadError(info.kind === 'unknown' ? (err.message || 'Your release didn’t upload. Please try again.') : info.message);
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const stepTitles = [
-        { title: 'Release Info',  subtitle: `General details for your ${releaseType}` },
-        { title: 'The Music',     subtitle: `Upload tracks for your ${releaseType}` },
+        { title: 'Release details',  subtitle: 'Start with your artwork and release information.' },
+        { title: 'Add your tracks',     subtitle: `Upload tracks for your ${releaseType}` },
         { title: 'Distribution',  subtitle: 'Platforms and release settings'         },
         { title: 'Track Credits', subtitle: 'Individual details for each song'       },
         { title: 'Review Release',subtitle: 'Double check everything before submitting' },
@@ -365,19 +339,35 @@ export const UploadWizard = () => {
 
     const { title: stepTitle, subtitle: stepSubtitle } = stepTitles[step - 1];
 
+    if (submitted) {
+        return (
+            <View style={[s.screen, { justifyContent: 'center' }]}>
+                <SuccessState
+                    title="Release submitted"
+                    body={`“${releaseTitle}” is with our team for review. We usually approve releases within 2–3 business days, then send them to ${selectedPlatforms.length} store${selectedPlatforms.length === 1 ? '' : 's'}. We’ll email you at each step.`}
+                    action={{ label: 'View in Music', onPress: () => router.replace('/app/music' as any) }}
+                    secondary={{ label: 'Back to dashboard', onPress: () => router.replace('/app' as any) }}
+                />
+            </View>
+        );
+    }
+
     return (
-        <View style={s.screen}>
+        <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <FormDialog visible={!!credit} title={credit?.field === 'producers' ? 'Add producer' : 'Add featured artist'} onClose={() => setCredit(null)} onSubmit={() => { if (!credit || !creditName.trim()) return; const track = tracks.find(t => t.id === credit.id); if (track) updateTrack(credit.id, credit.field, [...track[credit.field], creditName.trim()]); setCredit(null); }} submitLabel="Add credit"><TextInput accessibilityLabel="Credit name" value={creditName} onChangeText={setCreditName} placeholder="Full name" placeholderTextColor={colors.mutedForeground} style={{ color: colors.foreground, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 12 }} /></FormDialog>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
             <AppHeader showCurrencyToggle={false} />
 
             <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+                <Text style={[s.pageTitle, { color: colors.foreground }]}>New release</Text>
 
                 {/* Step indicator */}
                 <StepIndicator step={step} total={TOTAL_STEPS} colors={colors} />
 
                 {/* Step heading */}
                 <View style={s.stepHead}>
-                    <Text style={s.stepTitle}>{stepTitle}</Text>
+                    {step > 1 && <Text style={s.stepTitle}>{stepTitle}</Text>}
                     <Text style={s.stepSubtitle}>{stepSubtitle}</Text>
                 </View>
 
@@ -390,6 +380,9 @@ export const UploadWizard = () => {
                             {(['Single', 'EP', 'Album'] as ReleaseType[]).map((t) => (
                                 <Pressable
                                     key={t}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: releaseType === t }}
+                                    aria-pressed={releaseType === t}
                                     style={[s.typeBtn, releaseType === t && s.typeBtnActive]}
                                     onPress={() => setReleaseType(t)}
                                 >
@@ -398,8 +391,22 @@ export const UploadWizard = () => {
                             ))}
                         </View>
 
-                        <Text style={[s.label, { marginTop: 16 }]}>Release Title *</Text>
+                        <Text style={[s.label, { marginTop: 24 }]}>Cover artwork *</Text>
+                        <View style={s.artworkRow}>
+                            <Pressable accessibilityRole="button" accessibilityLabel={coverArtUri ? 'Change cover artwork' : 'Add cover artwork'} style={[s.artworkThumb, { backgroundColor: colors.secondary }]} onPress={pickCoverArt}>
+                                {coverArtUri ? <Image source={{ uri: coverArtUri }} style={{ width: '100%', height: '100%' }} /> : <ImageIcon size={28} color={colors.mutedForeground} />}
+                            </Pressable>
+                            <View style={{ flex: 1, gap: 6 }}>
+                                <Pressable accessibilityRole="button" onPress={pickCoverArt} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>{coverArtUri ? 'Change artwork' : 'Add cover artwork'}</Text></Pressable>
+                                <Text style={s.cardSub}>Square image · JPG or PNG</Text>
+                                <Text style={s.cardSub}>Square artwork recommended</Text>
+                                {coverArtUri && <Pressable accessibilityRole="button" onPress={() => setCoverArtUri(null)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.destructive, fontSize: 13 }}>Remove artwork</Text></Pressable>}
+                            </View>
+                        </View>
+
+                        <Text style={[s.label, { marginTop: 24 }]}>Release title *</Text>
                         <TextInput
+                            accessibilityLabel="Release title"
                             style={s.input}
                             placeholder="Enter release title"
                             placeholderTextColor={colors.mutedForeground}
@@ -409,6 +416,7 @@ export const UploadWizard = () => {
 
                         <Text style={[s.label, { marginTop: 12 }]}>Primary Artist *</Text>
                         <TextInput
+                            accessibilityLabel="Primary artist"
                             style={s.input}
                             placeholder="Enter artist name"
                             placeholderTextColor={colors.mutedForeground}
@@ -424,14 +432,14 @@ export const UploadWizard = () => {
                             <ChevronDown size={16} color={colors.mutedForeground} />
                         </Pressable>
                         {showGenrePicker === 'primary' && (
-                            <View style={s.pickerList}>
+                            <ScrollView style={s.pickerList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                                 {GENRES.map((g) => (
                                     <Pressable key={g} style={s.pickerItem} onPress={() => { setPrimaryGenre(g); setShowGenrePicker(null); }}>
                                         <Text style={[s.pickerItemText, primaryGenre === g && { color: colors.primaryGlow }]}>{g}</Text>
                                         {primaryGenre === g && <Check size={14} color={colors.primaryGlow} />}
                                     </Pressable>
                                 ))}
-                            </View>
+                            </ScrollView>
                         )}
 
                         <Text style={[s.label, { marginTop: 12 }]}>Secondary Genre <Text style={{ color: colors.mutedForeground }}>(Optional)</Text></Text>
@@ -442,14 +450,14 @@ export const UploadWizard = () => {
                             <ChevronDown size={16} color={colors.mutedForeground} />
                         </Pressable>
                         {showGenrePicker === 'secondary' && (
-                            <View style={s.pickerList}>
+                            <ScrollView style={s.pickerList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                                 {GENRES.map((g) => (
                                     <Pressable key={g} style={s.pickerItem} onPress={() => { setSecondaryGenre(g); setShowGenrePicker(null); }}>
                                         <Text style={[s.pickerItemText, secondaryGenre === g && { color: colors.primaryGlow }]}>{g}</Text>
                                         {secondaryGenre === g && <Check size={14} color={colors.primaryGlow} />}
                                     </Pressable>
                                 ))}
-                            </View>
+                            </ScrollView>
                         )}
 
                         <Text style={[s.label, { marginTop: 12 }]}>Release Description</Text>
@@ -461,27 +469,6 @@ export const UploadWizard = () => {
                             onChangeText={setDescription}
                             multiline
                         />
-                    </View>
-                )}
-
-                {/* Cover Art (still Step 1 but separate card) */}
-                {step === 1 && (
-                    <View style={s.card}>
-                        <Text style={s.cardTitle}>Cover Art *</Text>
-                        {coverArtUri ? (
-                            <View style={{ position: 'relative' }}>
-                                <Image source={{ uri: coverArtUri }} style={s.coverPreview} resizeMode="cover" />
-                                <Pressable style={s.removeCover} onPress={() => setCoverArtUri(null)}>
-                                    <X size={14} color="#fff" />
-                                </Pressable>
-                            </View>
-                        ) : (
-                            <Pressable style={s.coverPickBtn} onPress={pickCoverArt}>
-                                <ImageIcon size={32} color={colors.mutedForeground} />
-                                <Text style={s.coverPickTitle}>Select Cover Art</Text>
-                                <Text style={s.coverPickSub}>3000 x 3000 pixels (1:1 Ratio)</Text>
-                            </Pressable>
-                        )}
                     </View>
                 )}
 
@@ -511,7 +498,7 @@ export const UploadWizard = () => {
                             </View>
                         ))}
 
-                        <Pressable style={s.addTrackBtn} onPress={addDemoTrack}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Add audio track" style={s.addTrackBtn} onPress={addDemoTrack}>
                             <Plus size={20} color={colors.mutedForeground} />
                             <Text style={s.addTrackBtnTitle}>Add Tracks</Text>
                             <Text style={s.addTrackBtnSub}>WAV or FLAC</Text>
@@ -526,7 +513,7 @@ export const UploadWizard = () => {
                             <Text style={s.label}>Release Date *</Text>
                             <TextInput
                                 style={s.input}
-                                placeholder="dd/mm/yyyy"
+                                accessibilityLabel="Release date" placeholder="YYYY-MM-DD"
                                 placeholderTextColor={colors.mutedForeground}
                                 value={releaseDate}
                                 onChangeText={setReleaseDate}
@@ -602,7 +589,7 @@ export const UploadWizard = () => {
                                     return (
                                         <Pressable key={p} style={s.platformItem} onPress={() => togglePlatform(p)}>
                                             <View style={[s.checkbox, on && s.checkboxOn]}>
-                                                {on && <Check size={10} color="#fff" />}
+                                                {on && <Check size={10} color={colors.onPrimary} />}
                                             </View>
                                             <Text style={s.platformName}>{p}</Text>
                                         </Pressable>
@@ -625,17 +612,11 @@ export const UploadWizard = () => {
                                     <Text style={s.creditTrackTitle} numberOfLines={1}>{track.title}</Text>
                                 </View>
 
+                                <Text style={s.label}>Duration (seconds)</Text><TextInput accessibilityLabel={`Duration for ${track.title}`} style={s.input} keyboardType="numeric" value={track.duration ? String(track.duration) : ''} onChangeText={v => updateTrack(track.id, 'duration', Number(v) || null)} placeholder="e.g. 210" placeholderTextColor={colors.mutedForeground} />
                                 <Text style={s.label}>Featured Artist</Text>
                                 <Pressable
                                     style={s.addTagBtn}
-                                    onPress={() => {
-                                        Alert.prompt(
-                                            'Add Featured Artist',
-                                            '',
-                                            (val) => { if (val) updateTrack(track.id, 'featuredArtists', [...track.featuredArtists, val]); },
-                                            'plain-text',
-                                        );
-                                    }}
+                                    onPress={() => { setCredit({id: track.id, field: 'featuredArtists'}); setCreditName(''); }}
                                 >
                                     <Plus size={14} color={colors.primaryGlow} />
                                     <Text style={s.addTagBtnText}>Add featured artist</Text>
@@ -652,14 +633,7 @@ export const UploadWizard = () => {
                                 <Text style={[s.label, { marginTop: 12 }]}>Producer</Text>
                                 <Pressable
                                     style={s.addTagBtn}
-                                    onPress={() => {
-                                        Alert.prompt(
-                                            'Add Producer',
-                                            '',
-                                            (val) => { if (val) updateTrack(track.id, 'producers', [...track.producers, val]); },
-                                            'plain-text',
-                                        );
-                                    }}
+                                    onPress={() => { setCredit({id: track.id, field: 'producers'}); setCreditName(''); }}
                                 >
                                     <Plus size={14} color={colors.primaryGlow} />
                                     <Text style={s.addTagBtnText}>Add producer</Text>
@@ -793,37 +767,43 @@ export const UploadWizard = () => {
                     </View>
                 )}
 
+            </ScrollView>
+            <View style={[s.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+                {!!stepError && <View style={{ marginBottom: 10 }}><FormError message={stepError} /></View>}
                 {/* Navigation */}
                 <View style={s.navRow}>
-                    <Pressable
-                        style={[s.backBtn, step === 1 && { opacity: 0.4 }]}
+                    {step > 1 && <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Previous upload step"
+                        style={s.backBtn}
                         onPress={handleBack}
                         disabled={step === 1}
                     >
                         <Text style={s.backBtnText}>Back</Text>
-                    </Pressable>
+                    </Pressable>}
 
                     {step < TOTAL_STEPS ? (
-                        <Pressable style={s.nextBtn} onPress={handleNext}>
-                            <Text style={s.nextBtnText}>Next Step</Text>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Continue upload" style={s.nextBtn} onPress={handleNext}>
+                            <Text style={s.nextBtnText}>Continue →</Text>
                         </Pressable>
                     ) : (
                         <Pressable
+                            accessibilityRole="button" accessibilityLabel="Submit release"
                             style={[s.nextBtn, (isSubmitting || uploading) && { opacity: 0.5 }]}
                             onPress={handleSubmit}
                             disabled={isSubmitting || uploading}
                         >
                             {isSubmitting || uploading
-                                ? <ActivityIndicator color="#fff" size="small" />
+                                ? <ActivityIndicator color={colors.onPrimary} size="small" />
                                 : <Text style={s.nextBtnText}>Submit Release</Text>
                             }
                         </Pressable>
                     )}
                 </View>
 
-                <View style={{ height: 20 }} />
-            </ScrollView>
-        </View>
+                {step < TOTAL_STEPS && <Text style={[s.cardSub, { textAlign: 'center', marginTop: 8 }]}>Next: {stepTitles[step].title}</Text>}
+            </View>
+        </KeyboardAvoidingView>
     );
 };
 
@@ -833,35 +813,38 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     StyleSheet.create({
         screen: { flex: 1, backgroundColor: colors.background },
         scroll: { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, gap: 14, paddingTop: 4 },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, gap: 24, paddingTop: 4, paddingBottom: 32 },
+        pageTitle: { fontSize: 32, fontWeight: '700', letterSpacing: -1 },
+        footer: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingVertical: 12, borderTopWidth: 1 },
+        artworkRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+        artworkThumb: { width: 104, height: 104, borderRadius: 8, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
 
-        stepHead: { alignItems: 'center', gap: 4 },
+        stepHead: { alignItems: 'flex-start', gap: 6 },
         stepTitle: { fontSize: 22, fontWeight: '800', color: colors.foreground },
         stepSubtitle: { fontSize: 12, color: colors.mutedForeground },
 
         card: {
-            backgroundColor: colors.card, borderRadius: 20,
-            borderWidth: 1, borderColor: colors.border, padding: 16, gap: 0,
+            backgroundColor: colors.background, gap: 0,
         },
         cardTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
         cardSub:   { fontSize: 12, color: colors.mutedForeground },
 
         label:    { fontSize: 13, fontWeight: '600', color: colors.foreground, marginBottom: 6, marginTop: 0 },
         input: {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-            borderWidth: 1, borderColor: colors.border, borderRadius: 12,
-            paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: colors.foreground,
+            backgroundColor: colors.input,
+            borderWidth: 1, borderColor: colors.border, borderRadius: 8,
+            minHeight: 48, paddingHorizontal: 14, paddingVertical: 13, fontSize: 14, color: colors.foreground,
         },
         selector: {
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-            borderWidth: 1, borderColor: colors.border, borderRadius: 12,
-            paddingHorizontal: 14, paddingVertical: 11,
+            backgroundColor: colors.input,
+            borderWidth: 1, borderColor: colors.border, borderRadius: 8,
+            minHeight: 48, paddingHorizontal: 14, paddingVertical: 13,
         },
         selectorText: { fontSize: 14, color: colors.foreground },
         pickerList: {
-            backgroundColor: isDark ? '#101d36' : colors.card,
-            borderWidth: 1, borderColor: colors.border, borderRadius: 12, marginTop: 4,
+            backgroundColor: colors.card,
+            borderWidth: 1, borderColor: colors.border, borderRadius: 8, marginTop: 4,
             maxHeight: 200, overflow: 'hidden',
         },
         pickerItem: {
@@ -873,13 +856,13 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
 
         typeRow: { flexDirection: 'row', gap: 8, marginBottom: 0 },
         typeBtn: {
-            flex: 1, paddingVertical: 10, borderRadius: 12,
+            flex: 1, paddingVertical: 10, borderRadius: 8,
             borderWidth: 1, borderColor: colors.border, alignItems: 'center',
             backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
         },
         typeBtnActive: { backgroundColor: colors.primaryGlow, borderColor: colors.primaryGlow },
         typeBtnText: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground },
-        typeBtnTextActive: { color: '#fff' },
+        typeBtnTextActive: { color: colors.onPrimary },
 
         coverPickBtn: {
             borderWidth: 2, borderStyle: 'dashed', borderColor: colors.border,
@@ -887,21 +870,21 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         },
         coverPickTitle: { fontSize: 15, fontWeight: '600', color: colors.foreground },
         coverPickSub:   { fontSize: 11, color: colors.mutedForeground },
-        coverPreview: { width: '100%', aspectRatio: 1, borderRadius: 12 },
+        coverPreview: { width: '100%', aspectRatio: 1, borderRadius: 8 },
         removeCover: {
             position: 'absolute', top: 8, right: 8,
-            backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, padding: 4,
+            backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, padding: 4,
         },
 
         // Tracks
         trackItem: {
             flexDirection: 'row', alignItems: 'center', gap: 10,
-            padding: 10, borderRadius: 12,
+            padding: 10, borderRadius: 8,
             backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
             marginBottom: 8, borderWidth: 1, borderColor: colors.border,
         },
         trackNumBadge: {
-            width: 28, height: 28, borderRadius: 14,
+            width: 28, height: 28, borderRadius: 10,
             backgroundColor: `${colors.primaryGlow}22`,
             justifyContent: 'center', alignItems: 'center',
         },
@@ -913,7 +896,7 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         trackFilename: { fontSize: 10, color: colors.mutedForeground, marginTop: 2 },
         addTrackBtn: {
             borderWidth: 2, borderStyle: 'dashed', borderColor: colors.border,
-            borderRadius: 12, paddingVertical: 20, alignItems: 'center', gap: 4,
+            borderRadius: 8, paddingVertical: 20, alignItems: 'center', gap: 4,
         },
         addTrackBtnTitle: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground },
         addTrackBtnSub:   { fontSize: 10, color: colors.mutedForeground },
@@ -934,7 +917,7 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
 
         // Credits
         creditTrackHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: 12 },
-        creditNumBadge: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: colors.primaryGlow, justifyContent: 'center', alignItems: 'center' },
+        creditNumBadge: { width: 24, height: 24, borderRadius: 8, borderWidth: 1, borderColor: colors.primaryGlow, justifyContent: 'center', alignItems: 'center' },
         creditNumText:  { fontSize: 11, fontWeight: '700', color: colors.primaryGlow },
         creditTrackTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.foreground },
         addTagBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
@@ -948,12 +931,12 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         tagChipText: { fontSize: 12, color: colors.primaryGlow },
         explicitRow: { flexDirection: 'row', gap: 8 },
         explicitBtn: {
-            flex: 1, paddingVertical: 10, borderRadius: 12,
+            flex: 1, paddingVertical: 10, borderRadius: 8,
             borderWidth: 1, borderColor: colors.border, alignItems: 'center',
         },
         explicitBtnActive: { backgroundColor: colors.primaryGlow, borderColor: colors.primaryGlow },
         explicitBtnText: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground },
-        explicitBtnTextActive: { color: '#fff' },
+        explicitBtnTextActive: { color: colors.onPrimary },
         quickToolCard: {
             backgroundColor: isDark ? 'rgba(245,158,11,0.06)' : 'rgba(245,158,11,0.08)',
             borderWidth: 1, borderColor: 'rgba(245,158,11,0.2)',
@@ -965,7 +948,7 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
 
         // Review
         reviewHeader: { flexDirection: 'row', gap: 14, marginBottom: 16 },
-        reviewCover:  { width: 80, height: 80, borderRadius: 12 },
+        reviewCover:  { width: 80, height: 80, borderRadius: 8 },
         reviewCoverPlaceholder: { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', justifyContent: 'center', alignItems: 'center' },
         reviewTitle:  { fontSize: 18, fontWeight: '800', color: colors.foreground },
         reviewArtist: { fontSize: 14, color: colors.mutedForeground, marginTop: 2 },
@@ -976,7 +959,7 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         reviewTrackNum: { fontSize: 13, color: colors.mutedForeground, fontWeight: '600', width: 20 },
         reviewTrackName:{ flex: 1, fontSize: 14, fontWeight: '500', color: colors.foreground },
         eBadge: { backgroundColor: colors.destructive, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
-        eBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+        eBadgeText: { fontSize: 9, fontWeight: '800', color: colors.onPrimary },
         reviewGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 },
         reviewGridItem: { width: '45%' },
         reviewGridLabel:{ fontSize: 11, color: colors.mutedForeground, marginBottom: 2 },
@@ -987,13 +970,13 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         // Nav buttons
         navRow: { flexDirection: 'row', gap: 10 },
         backBtn: {
-            flex: 1, paddingVertical: 14, borderRadius: 14,
+            flex: 1, paddingVertical: 14, borderRadius: 10,
             borderWidth: 1, borderColor: colors.border, alignItems: 'center',
         },
         backBtnText: { fontSize: 15, fontWeight: '600', color: colors.foreground },
         nextBtn: {
-            flex: 1.5, paddingVertical: 14, borderRadius: 14,
+            flex: 1.5, paddingVertical: 14, borderRadius: 10,
             backgroundColor: colors.primaryGlow, alignItems: 'center',
         },
-        nextBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+        nextBtnText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
     });

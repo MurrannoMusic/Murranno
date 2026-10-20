@@ -7,13 +7,13 @@ import { useArtistProfile } from '@/hooks/useArtistProfile';
 
 export const KYCStatusBadge = () => {
     const router = useRouter();
-    const { colors, isDark } = useTheme();
+    const { colors } = useTheme();
     const { profile, loading } = useArtistProfile();
 
-    if (loading || !profile) return null;
+    if (loading || !profile || profile.kyc_status === 'verified') return null;
 
     const status = profile.kyc_status || 'unverified';
-    
+
     const config = {
         unverified: {
             label: 'Verification Required',
@@ -26,8 +26,8 @@ export const KYCStatusBadge = () => {
             label: 'Verification Pending',
             sub: 'We are reviewing your documents',
             Icon: Clock,
-            color: '#6366f1',
-            bg: 'rgba(99,102,241,0.12)',
+            color: colors.primary,
+            bg: `${colors.primary}12`,
         },
         verified: {
             label: 'Fully Verified',
@@ -54,20 +54,19 @@ export const KYCStatusBadge = () => {
     const Icon = config.Icon;
 
     return (
-        <Pressable 
+        <Pressable
             style={[styles.container, { backgroundColor: config.bg, borderColor: `${config.color}30` }]}
-            onPress={() => status !== 'verified' && router.push('/app/kyc' as any)}
+            accessibilityRole="button"
+            onPress={() => router.push('/app/kyc' as any)}
         >
             <View style={[styles.iconWrap, { backgroundColor: config.color }]}>
-                <Icon size={14} color="#fff" />
+                <Icon size={14} color={colors.background} />
             </View>
             <View style={styles.content}>
                 <Text style={[styles.label, { color: config.color }]}>{config.label}</Text>
-                <Text style={styles.sub} numberOfLines={1}>{config.sub}</Text>
+                <Text style={[styles.sub, { color: colors.mutedForeground }]} numberOfLines={1}>{config.sub}</Text>
             </View>
-            {status !== 'verified' && (
-                <ChevronRight size={16} color={config.color} />
-            )}
+            <ChevronRight size={16} color={config.color} />
         </Pressable>
     );
 };
@@ -77,7 +76,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: 12,
-        borderRadius: 16,
+        borderRadius: 8,
         borderWidth: 1,
         gap: 12,
         marginBottom: 8,
@@ -96,7 +95,7 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 13,
         fontWeight: '700',
-        textTransform: 'uppercase',
+
         letterSpacing: 0.5,
     },
     sub: {

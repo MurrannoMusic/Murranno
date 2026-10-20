@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
 export interface Track {
   id: string;
@@ -23,7 +22,6 @@ export interface ReleaseDetail {
   language: string | null;
   label: string | null;
   copyright: string | null;
-  copyright: string | null;
   upc_ean: string | null;
   isrc: string | null;
   recording_year: string | null;
@@ -36,6 +34,7 @@ export interface ReleaseDetail {
 export const useReleaseDetail = (releaseId: string | undefined) => {
   const [release, setRelease] = useState<ReleaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     if (releaseId) {
@@ -47,6 +46,7 @@ export const useReleaseDetail = (releaseId: string | undefined) => {
     if (!releaseId) return;
 
     try {
+      setError(null);
       setLoading(true);
 
       const { data, error } = await supabase.functions.invoke('get-release-detail', {
@@ -61,14 +61,15 @@ export const useReleaseDetail = (releaseId: string | undefined) => {
 
       setRelease(data.release);
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching release detail:', error);
-      toast.error('Failed to load release details');
     } finally {
       setLoading(false);
     }
   };
 
   return {
+    error,
     release,
     loading,
     refetch: fetchReleaseDetail,

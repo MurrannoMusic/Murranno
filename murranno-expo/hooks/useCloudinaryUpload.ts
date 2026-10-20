@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { Platform } from 'react-native';
+import { API_URL, supabase } from '@/integrations/supabase/client';
 
 export interface RNFile {
   uri: string;
@@ -7,73 +8,65 @@ export interface RNFile {
   name: string;
 }
 
+/**
+ * Uploads media to the Murranno API (stored in Cloudflare R2). The name is kept from the
+ * Cloudinary era so existing callers don't change; files already on Cloudinary keep working.
+ */
 export const useCloudinaryUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const uploadToCloudinary = async (file: RNFile, folder: string, resourceType: 'image' | 'video') => {
+  const upload = async (file: RNFile, folder: string) => {
     setUploading(true);
     setProgress(0);
-
     try {
-      // 1. Get Signature from Backend
-      const { data: signatureData, error: signatureError } = await supabase.functions.invoke('generate-cloudinary-signature', {
-        body: { folder },
-      });
-
-      if (signatureError) throw new Error(`Signature generation failed: ${signatureError.message}`);
-      if (!signatureData?.signature) throw new Error('No signature returned from backend');
-
-      const { signature, timestamp, cloudName, apiKey } = signatureData;
-
-      // 2. Direct Upload to Cloudinary using FormData formatted for React Native
+      const { data: { session } } = await supabase.auth.getSession();
+      // React Native sends local files as multipart parts ({ uri, name, type }).
       const formData = new FormData();
-      formData.append('file', file as any);
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        if (!response.ok) throw new Error('The selected file could not be read. Please select it again.');
+        const blob = await response.blob();
+        formData.append('file', new File([blob], file.name, { type: file.type || blob.type }));
+      } else { formData.append('file', file as any); }
       formData.append('folder', folder);
-      formData.append('api_key', apiKey);
-      formData.append('timestamp', timestamp);
-      formData.append('signature', signature);
-
-      const url = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
 
       return await new Promise<{ url: string; publicId: string }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', url);
-
+        xhr.open('POST', `${API_URL}/functions/v1/upload-media`);
+        xhr.setRequestHeader('Authorization', `Bearer ${session?.access_token ?? ''}`);
         xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            const percent = Math.round((event.loaded / event.total) * 100);
-            setProgress(percent);
-          }
+          if (event.lengthComputable) setProgress(Math.round((event.loaded / event.total) * 100));
         };
-
         xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const response = JSON.parse(xhr.responseText);
-              setProgress(100);
-              resolve({ url: response.secure_url, publicId: response.public_id });
-            } catch (e) {
-              reject(new Error('Invalid JSON response from Cloudinary'));
-            }
+          let response: any = null;
+          try {
+            response = JSON.parse(xhr.responseText);
+          } catch {
+            /* handled below */
+          }
+          if (xhr.status >= 200 && xhr.status < 300 && response?.url) {
+            setProgress(100);
+            resolve({ url: response.url, publicId: response.publicId });
           } else {
-            reject(new Error(`Cloudinary upload failed (${xhr.status}): ${xhr.responseText}`));
+            reject(new Error(response?.error || `Upload failed (${xhr.status})`));
           }
         };
-
+        xhr.timeout = 180000;
+        xhr.ontimeout = () => reject(new Error('Upload timed out. Check your connection and try again.'));
         xhr.onerror = () => reject(new Error('Network error during upload'));
         xhr.send(formData);
       });
     } catch (error: any) {
-      console.error(`Error uploading ${resourceType}:`, error);
+      console.error('Error uploading file:', error);
       throw error;
     } finally {
       setUploading(false);
     }
   };
 
-  const uploadImage = (file: RNFile, folder: string = 'uploads') => uploadToCloudinary(file, folder, 'image');
-  const uploadAudio = (file: RNFile, folder: string = 'audio') => uploadToCloudinary(file, folder, 'video');
+  const uploadImage = (file: RNFile, folder: string = 'uploads') => upload(file, folder);
+  const uploadAudio = (file: RNFile, folder: string = 'audio') => upload(file, folder);
 
   return {
     uploadImage,

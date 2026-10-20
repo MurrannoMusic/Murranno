@@ -1,16 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-    View, Text, ScrollView, StyleSheet, StatusBar,
+    View, Text, ScrollView, StyleSheet, StatusBar, Share,
     Pressable, ActivityIndicator, TextInput, Image,
-    Alert,
+    Linking,
 } from 'react-native';
 import {
     Edit2, Share2, Save, X, Plus, Music2,
-    User,
 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
+import { notify } from '@/lib/api';
+import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload';
 import { useTheme } from '@/hooks/useTheme';
 import { useArtistProfile } from '@/hooks/useArtistProfile';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,7 +54,7 @@ const PlatformRow = ({
             )}
         </View>
         {!isEditing && (
-            <Pressable style={{
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${name}`} disabled={!value} onPress={() => { if (/^https?:\/\//i.test(value)) Linking.openURL(value).catch(e => notify('Could not open link', e.message)); }} style={{
                 width: 28, height: 28, borderRadius: 14,
                 backgroundColor: `${colors.primaryGlow}18`,
                 justifyContent: 'center', alignItems: 'center',
@@ -68,12 +68,13 @@ const PlatformRow = ({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const ArtistProfile = () => {
-    const router = useRouter();
+    const { uploadImage } = useCloudinaryUpload();
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
-    const { profile, loading, updating, updateProfile } = useArtistProfile();
+    const { profile, loading, updating, updateProfile, refetch } = useArtistProfile();
 
+    const editSnapshot = useRef<Record<string, string>>({});
     const [isEditing, setIsEditing]   = useState(false);
     const [firstName, setFirstName]   = useState('');
     const [lastName, setLastName]     = useState('');
@@ -121,7 +122,7 @@ export const ArtistProfile = () => {
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'We need access to your photos to update your profile image.');
+                notify('Permission Denied', 'We need access to your photos to update your profile image.');
                 return;
             }
 
@@ -134,25 +135,12 @@ export const ArtistProfile = () => {
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const asset = result.assets[0];
-                // In a real app, you'd upload this to Cloudinary/Supabase immediately or on Save
-                // For now, we update the local state which can be handled in handleSave
-                // But wait, the ArtistProfile component uses 'profile' from a hook.
-                // I might need to update the hook or handle the upload here.
-                
-                Alert.alert('Uploading...', 'Uploading your new avatar');
-                const { url } = await uploadImage({ uri: asset.uri, type: 'image/jpeg', name: 'avatar.jpg' }, 'avatars');
-                if (url) {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                        await supabase.from('artists').update({ profile_image: url }).eq('user_id', user.id);
-                        Alert.alert('Success', 'Avatar updated successfully');
-                        // In a real app, you'd trigger a refetch here
-                    }
-                }
+                const { url } = await uploadImage({ uri: asset.uri, type: asset.mimeType || 'image/jpeg', name: asset.fileName || 'avatar.jpg' }, 'avatars');
+                if (url) { const success = await updateProfile({ profile_image: url }); if (!success) return; await refetch(); notify('Avatar updated', 'Your new profile photo has been saved.'); }
             }
         } catch (err) {
             console.error('Avatar picking error:', err);
-            Alert.alert('Error', 'Failed to update avatar');
+            notify('Error', 'Failed to update avatar');
         }
     };
 
@@ -173,6 +161,7 @@ export const ArtistProfile = () => {
 
     const handleSave = async () => {
         const success = await updateProfile({
+            personal: { first_name: firstName, last_name: lastName, phone_number: phone, nin_number: nin },
             stage_name:     stageName,
             bio,
             spotify_id:     spotifyId,
@@ -191,26 +180,32 @@ export const ArtistProfile = () => {
         });
 
         if (success) {
-            // Also save personal info
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                await supabase.from('profiles').update({
-                    first_name:   firstName,
-                    last_name:    lastName,
-                    full_name:    `${firstName} ${lastName}`.trim(),
-                    phone_number: phone,
-                    nin_number:   nin,
-                }).eq('id', user.id);
-            }
+            notify('Profile saved', 'Your artist and personal details have been updated.');
             setIsEditing(false);
         }
     };
 
+    const startEditing = () => { editSnapshot.current = { firstName, lastName, phone, nin, stageName, bio, spotifyId, appleId, spotifyUrl, appleUrl, youtubeUrl, audiomackUrl, soundcloudUrl, deezerUrl, tidalUrl, instagramUrl, facebookUrl, tiktokUrl, twitterUrl }; setIsEditing(true); };
     const handleCancel = () => {
-        if (profile) {
-            setStageName(profile.stage_name || '');
-            setBio(profile.bio || '');
-        }
+        setFirstName(editSnapshot.current.firstName || '');
+        setLastName(editSnapshot.current.lastName || '');
+        setPhone(editSnapshot.current.phone || '');
+        setNin(editSnapshot.current.nin || '');
+        setStageName(editSnapshot.current.stageName || '');
+        setBio(editSnapshot.current.bio || '');
+        setSpotifyId(editSnapshot.current.spotifyId || '');
+        setAppleId(editSnapshot.current.appleId || '');
+        setSpotifyUrl(editSnapshot.current.spotifyUrl || '');
+        setAppleUrl(editSnapshot.current.appleUrl || '');
+        setYoutubeUrl(editSnapshot.current.youtubeUrl || '');
+        setAudiomackUrl(editSnapshot.current.audiomackUrl || '');
+        setSoundcloudUrl(editSnapshot.current.soundcloudUrl || '');
+        setDeezerUrl(editSnapshot.current.deezerUrl || '');
+        setTidalUrl(editSnapshot.current.tidalUrl || '');
+        setInstagramUrl(editSnapshot.current.instagramUrl || '');
+        setFacebookUrl(editSnapshot.current.facebookUrl || '');
+        setTiktokUrl(editSnapshot.current.tiktokUrl || '');
+        setTwitterUrl(editSnapshot.current.twitterUrl || '');
         setIsEditing(false);
     };
 
@@ -238,7 +233,7 @@ export const ArtistProfile = () => {
                             <Image source={{ uri: profile.profile_image }} style={s.avatar} />
                         ) : (
                             <View style={s.avatarPlaceholder}>
-                                <Text style={{ fontSize: 24, fontWeight: '800', color: colors.mutedForeground }}>
+                                <Text style={{ fontSize: 24, fontWeight: '600', color: colors.mutedForeground }}>
                                     {((profile?.stage_name || 'A')
                                         .split(' ')
                                         .map((n) => n[0])
@@ -313,8 +308,8 @@ export const ArtistProfile = () => {
                         <>
                             <Pressable style={[s.actionBtn, s.actionBtnPrimary]} onPress={handleSave} disabled={updating}>
                                 {updating
-                                    ? <ActivityIndicator color="#fff" size="small" />
-                                    : <><Save size={16} color="#fff" /><Text style={s.actionBtnPrimaryText}>Save Changes</Text></>
+                                    ? <ActivityIndicator color={colors.onPrimary} size="small" />
+                                    : <><Save size={16} color={colors.onPrimary} /><Text style={s.actionBtnPrimaryText}>Save Changes</Text></>
                                 }
                             </Pressable>
                             <Pressable style={[s.actionBtn, s.actionBtnOutline]} onPress={handleCancel} disabled={updating}>
@@ -324,15 +319,15 @@ export const ArtistProfile = () => {
                         </>
                     ) : (
                         <>
-                            <Pressable style={[s.actionBtn, s.actionBtnPrimary]} onPress={() => setIsEditing(true)}>
-                                <Edit2 size={16} color="#fff" />
+                            <Pressable style={[s.actionBtn, s.actionBtnPrimary]} onPress={startEditing}>
+                                <Edit2 size={16} color={colors.onPrimary} />
                                 <Text style={s.actionBtnPrimaryText}>Edit Profile</Text>
                             </Pressable>
-                            <Pressable 
-                                style={[s.actionBtn, s.actionBtnOutline]} 
+                            <Pressable
+                                style={[s.actionBtn, s.actionBtnOutline]}
                                 onPress={async () => {
                                     try {
-                                        await require('react-native').Share.share({
+                                        await Share.share({
                                             message: `Check out ${profile?.stage_name || 'Artist'} on Murranno Music! https://murrannomusic.co/artist/${profile?.id || ''}`,
                                         });
                                     } catch (error) {
@@ -393,12 +388,12 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     StyleSheet.create({
         screen: { flex: 1, backgroundColor: colors.background },
         scroll: { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, paddingTop: 60, gap: 14 },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 60, gap: 14 },
         centred: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
         // Profile card
         profileCard: {
-            backgroundColor: colors.card, borderRadius: 20,
+            backgroundColor: colors.card, borderRadius: 12,
             borderWidth: 1, borderColor: colors.border, padding: 20,
             alignItems: 'center', gap: 10,
         },
@@ -409,7 +404,7 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
             justifyContent: 'center', alignItems: 'center',
         },
-        stageName: { fontSize: 20, fontWeight: '800', color: colors.foreground },
+        stageName: { fontSize: 20, fontWeight: '600', color: colors.foreground },
         bioText:   { fontSize: 13, color: colors.mutedForeground, textAlign: 'center', maxWidth: 280 },
         statsRow:  { flexDirection: 'row', alignItems: 'center', gap: 24, marginTop: 4 },
         statItem:  { alignItems: 'center' },
@@ -435,13 +430,13 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             gap: 6, paddingVertical: 12, borderRadius: 14,
         },
         actionBtnPrimary: { backgroundColor: colors.primaryGlow },
-        actionBtnPrimaryText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+        actionBtnPrimaryText: { fontSize: 14, fontWeight: '600', color: colors.onPrimary },
         actionBtnOutline: { borderWidth: 1, borderColor: colors.border },
         actionBtnOutlineText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
 
         // Sections
         section: {
-            backgroundColor: colors.card, borderRadius: 20,
+            backgroundColor: colors.card, borderRadius: 12,
             borderWidth: 1, borderColor: colors.border, padding: 16,
         },
         sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground, marginBottom: 4 },

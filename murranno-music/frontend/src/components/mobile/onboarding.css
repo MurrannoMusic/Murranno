@@ -1,0 +1,25 @@
+@font-face { font-family: 'Murranno Boldonse'; src: url('/fonts/Boldonse-Regular.ttf') format('truetype'); font-style: normal; font-weight: 400; font-display: swap; }
+.app-onboarding { min-height: 100svh; max-width: 540px; margin: 0 auto; padding: max(16px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 18px; color: #211527; background: #fff; }
+.app-onboarding-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 44px; }
+.app-onboarding-header img { width: 145px; height: auto; }
+.app-onboarding-header > button { min-height: 44px; padding: 0 6px; font: 500 12px/1.4 'Inter',sans-serif; color: #735d7e; }
+.app-onboarding button:focus-visible, .app-onboarding a:focus-visible { outline: 3px solid #7040ad; outline-offset: 3px; }
+.app-onboarding-card { padding: 12px 8px 0; flex: 1; display: flex; flex-direction: column; background: #fff; }
+.app-onboarding-card > [aria-live] { flex: 1; display: flex; flex-direction: column; }
+.app-onboarding-card-top { display: flex; justify-content: flex-end; font: 400 10px/1.5 'Inter',sans-serif; letter-spacing: .06em; color: #8b7a94; }
+.app-onboarding-card h1 { font: 400 clamp(21px,5.8vw,29px)/1.7 'Murranno Boldonse',sans-serif; letter-spacing: -.055em; margin: 20px 0 0; }
+.app-onboarding-art { width: calc(100% + 56px); height: clamp(240px,48svh,460px); flex: 1; min-height: 240px; display: block; margin: 20px -28px 0; animation: onboarding-art-in 350ms cubic-bezier(.215,.61,.355,1); }
+.app-onboarding-card p { font: 400 14px/1.75 'Inter',sans-serif; color: #64516c; margin: 16px 0 0; max-width: 31em; }
+.app-onboarding-footer { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+.app-onboarding-pagination { display: flex; }
+.app-onboarding-pagination button { min-width: 34px; min-height: 44px; display: grid; place-items: center; }
+.app-onboarding-pagination span { width: 7px; height: 7px; border-radius: 20px; background: #d9cde4; transition: width 200ms; }
+.app-onboarding-pagination [aria-current] span { background: #7040ad; width: 24px; }
+.app-onboarding-actions { display: flex; align-items: center; gap: 10px; }
+.app-onboarding-back { display: grid; place-items: center; width: 44px; height: 48px; color: #7040ad; }
+.app-onboarding-next { display: inline-flex; align-items: center; justify-content: space-between; gap: 24px; background: #7040ad; color: #fff; min-height: 52px; border-radius: 40px; padding: 12px 20px; font: 600 12px/1.5 'Inter',sans-serif; }
+.app-onboarding-footer > p { grid-column: 1/-1; text-align: center; font: 400 13px/1.7 'Inter',sans-serif; color: #735d7e; margin: 4px 0 0; }
+.app-onboarding-footer a { color: #7040ad; font-weight: 600; }
+@keyframes onboarding-art-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 350px) { .app-onboarding-card h1 { font-size: 19px; }.app-onboarding-next { gap: 12px; padding-inline: 16px; } }
+@media (prefers-reduced-motion: reduce) { .app-onboarding-art { animation: none; }.app-onboarding * { transition: none!important; } }

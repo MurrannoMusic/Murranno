@@ -1,0 +1,35 @@
+{
+  "name": "murranno-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Murranno API on Cloudflare Workers + D1 (Supabase-compatible auth, REST and functions)",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local-upstream 127.0.0.1:8787",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:init": "wrangler d1 execute murranno-db --remote --file=./src/db/schema.sql",
+    "db:init:local": "wrangler d1 execute murranno-db --local --file=./src/db/schema.sql",
+    "db:seed": "wrangler d1 execute murranno-db --remote --file=./src/db/seed.sql",
+    "db:seed:local": "wrangler d1 execute murranno-db --local --file=./src/db/seed.sql",
+    "export:supabase": "node scripts/export-supabase.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "check:export": "node scripts/export-supabase.mjs --check",
+    "test:mobile": "node tests/mobile-contracts.cjs && node tests/mobile-database.cjs"
+  },
+  "dependencies": {
+    "bcryptjs": "3.0.3",
+    "hono": "4.13.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261003.1",
+    "@supabase/supabase-js": "2.101.1",
+    "pg": "8.23.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.147.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20261001.1": true
+  }
+}

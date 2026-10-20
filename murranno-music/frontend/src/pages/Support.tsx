@@ -9,11 +9,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Mail, MessageSquare, Ticket } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { FieldError } from '@/components/forms/FieldError';
+import { SuccessState, friendlyError } from '@/components/states/StateViews';
+import { email, fieldA11y, minLength, required, validate } from '@/lib/validation';
 import { UserTicketsList } from '@/components/support/UserTicketsList';
 
 export const Support = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("submit");
   const [formData, setFormData] = useState({
@@ -24,34 +29,49 @@ export const Support = () => {
     message: ''
   });
 
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof formData | 'form', string>>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const set = (field: keyof typeof formData, value: string) => {
+    setFormData({ ...formData, [field]: value });
+    setErrors({});
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.email || !formData.category || !formData.subject || !formData.message) {
-      toast.error('Please fill in all fields');
+    const found = validate(formData, {
+      name: [required('your name')],
+      email: [email],
+      category: [(v) => (v ? '' : 'Choose a category')],
+      subject: [required('a subject'), minLength(4, 'Subject')],
+      message: [required('your message'), minLength(20, 'Message')],
+    });
+    setErrors(found);
+    const first = Object.keys(found)[0];
+    if (first) {
+      document.getElementById(first)?.focus();
       return;
     }
 
     setLoading(true);
 
     try {
-      const { error } = await import('@/integrations/supabase/client').then(m => m.supabase)
-        .from('support_tickets')
-        .insert({
-          subject: formData.subject,
-          message: formData.message,
-          category: formData.category,
-          status: 'open'
-        });
+      const { error } = await supabase.from('support_tickets' as never).insert({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        subject: formData.subject.trim(),
+        message: formData.message.trim(),
+        category: formData.category,
+      } as never);
 
       if (error) throw error;
 
-      toast.success('Support request submitted! We\'ll get back to you within 24 hours.');
       setFormData({ name: '', email: '', category: '', subject: '', message: '' });
-      setActiveTab("tickets"); // Switch to tickets tab after submission
-    } catch (error: any) {
+      setSubmitted(true);
+      queryClient.invalidateQueries({ queryKey: ['user-tickets'] });
+    } catch (error) {
       console.error('Support error:', error);
-      toast.error(error.message || 'Failed to submit request');
+      setErrors({ form: friendlyError(error).message });
     } finally {
       setLoading(false);
     }
@@ -109,6 +129,16 @@ export const Support = () => {
               </Card>
             </div>
 
+            {submitted ? (
+              <Card className="shadow-none border-border/50">
+                <SuccessState
+                  title="Request sent"
+                  body="Thanks for reaching out. Our team replies within 24 hours, by email and under My Tickets."
+                  action={{ label: 'View my tickets', onClick: () => { setSubmitted(false); setActiveTab('tickets'); } }}
+                  secondary={{ label: 'Send another', onClick: () => setSubmitted(false) }}
+                />
+              </Card>
+            ) : (
             <Card className="shadow-none border-border/50">
               <CardHeader className="p-4">
                 <CardTitle className="text-base">Submit a Support Request</CardTitle>
@@ -117,17 +147,19 @@ export const Support = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 pt-0">
-                <form onSubmit={handleSubmit} className="space-y-3">
+                <form onSubmit={handleSubmit} noValidate className="space-y-3">
                   <div className="grid md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="name" className="text-xs">Name</Label>
                       <Input
                         id="name"
                         value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        onChange={(e) => set('name', e.target.value)}
+                        {...fieldA11y('name', errors.name)}
                         disabled={loading}
                         className="h-9 text-sm"
                       />
+                      <FieldError id="name" error={errors.name} />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="email" className="text-xs">Email</Label>
@@ -135,10 +167,12 @@ export const Support = () => {
                         id="email"
                         type="email"
                         value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        onChange={(e) => set('email', e.target.value)}
+                        {...fieldA11y('email', errors.email)}
                         disabled={loading}
                         className="h-9 text-sm"
                       />
+                      <FieldError id="email" error={errors.email} />
                     </div>
                   </div>
 
@@ -146,10 +180,10 @@ export const Support = () => {
                     <Label htmlFor="category" className="text-xs">Category</Label>
                     <Select
                       value={formData.category}
-                      onValueChange={(value) => setFormData({ ...formData, category: value })}
+                      onValueChange={(value) => set('category', value)}
                       disabled={loading}
                     >
-                      <SelectTrigger className="h-9 text-sm">
+                      <SelectTrigger id="category" className="h-9 text-sm" {...fieldA11y('category', errors.category)}>
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
                       <SelectContent>
@@ -161,6 +195,7 @@ export const Support = () => {
                         <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FieldError id="category" error={errors.category} />
                   </div>
 
                   <div className="space-y-1.5">
@@ -168,10 +203,12 @@ export const Support = () => {
                     <Input
                       id="subject"
                       value={formData.subject}
-                      onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                      onChange={(e) => set('subject', e.target.value)}
+                        {...fieldA11y('subject', errors.subject)}
                       disabled={loading}
                       className="h-9 text-sm"
                     />
+                    <FieldError id="subject" error={errors.subject} />
                   </div>
 
                   <div className="space-y-1.5">
@@ -180,11 +217,15 @@ export const Support = () => {
                       id="message"
                       rows={4}
                       value={formData.message}
-                      onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                      onChange={(e) => set('message', e.target.value)}
+                      {...fieldA11y('message', errors.message)}
                       disabled={loading}
                       className="text-sm min-h-[100px]"
                     />
+                    <FieldError id="message" error={errors.message} />
                   </div>
+
+                  {errors.form && <p role="alert" className="text-sm text-destructive">{errors.form}</p>}
 
                   <Button type="submit" disabled={loading} className="w-full h-9">
                     {loading ? 'Submitting...' : 'Submit Request'}
@@ -192,6 +233,7 @@ export const Support = () => {
                 </form>
               </CardContent>
             </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="tickets">

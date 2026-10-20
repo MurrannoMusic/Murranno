@@ -21,7 +21,7 @@ export interface AdminTrack {
     id: string;
     title: string;
     audio_file_url: string | null;
-    duration?: string | null;
+    duration?: number | null;
     isrc?: string | null;
     lyrics?: string | null;
     songwriter_legal_names?: string[] | null;

@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CampaignDetailDialog } from "@/components/campaigns/CampaignDetailDialog";
-import { Calendar, DollarSign, Eye, TrendingUp, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
+import { Calendar, DollarSign, Eye, TrendingUp, Megaphone } from "lucide-react";
+import { EmptyState, ErrorState } from "@/components/states/StateViews";
 import { Campaign, CampaignStatus } from "@/types/campaign";
 import { format } from "date-fns";
 
@@ -18,15 +18,17 @@ export default function CampaignTracking() {
   const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("all");
 
   useEffect(() => {
-    if (user) {
-      fetchCampaigns();
-      setupRealtimeSubscription();
-    }
+    if (!user) return;
+    fetchCampaigns();
+    // The API has no realtime channels: poll for status changes instead.
+    const timer = setInterval(fetchCampaigns, 30_000);
+    return () => clearInterval(timer);
   }, [user]);
 
   const fetchCampaigns = async () => {
@@ -74,47 +76,13 @@ export default function CampaignTracking() {
       }));
 
       setCampaigns(transformedCampaigns);
-    } catch (error: any) {
+      setError(null);
+    } catch (error) {
       console.error('Error fetching campaigns:', error);
-      toast.error('Failed to load campaigns');
+      setError(error); // shown only while there's nothing cached; a failed poll keeps the last list
     } finally {
       setLoading(false);
     }
-  };
-
-  const setupRealtimeSubscription = () => {
-    const channel = supabase
-      .channel('campaign-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'campaigns',
-          filter: `user_id=eq.${user?.id}`,
-        },
-        (payload) => {
-          console.log('Campaign update:', payload);
-
-          if (payload.eventType === 'INSERT') {
-            fetchCampaigns();
-          } else if (payload.eventType === 'UPDATE') {
-            setCampaigns((prev) =>
-              prev.map((campaign) =>
-                campaign.id === payload.new.id ? { ...campaign, ...payload.new } : campaign
-              )
-            );
-            toast.success('Campaign status updated');
-          } else if (payload.eventType === 'DELETE') {
-            setCampaigns((prev) => prev.filter((c) => c.id !== payload.old.id));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   };
 
   const getStatusColor = (status: CampaignStatus) => {
@@ -188,19 +156,12 @@ export default function CampaignTracking() {
                   </Card>
                 ))}
               </div>
+            ) : error && campaigns.length === 0 ? (
+              <ErrorState error={error} title="Couldn’t load your campaigns" onRetry={() => { setLoading(true); fetchCampaigns(); }} />
+            ) : campaigns.length === 0 ? (
+              <EmptyState icon={Megaphone} title="No campaigns yet" body="Promote a release with playlist pitching, ads and influencer pushes. Your campaigns and their progress show up here." action={{ label: 'Create your first campaign', to: '/app/promotions' }} />
             ) : filteredCampaigns.length === 0 ? (
-              <Card className="p-12 text-center">
-                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">No campaigns found</h3>
-                <p className="text-muted-foreground mb-4">
-                  {activeTab === 'all'
-                    ? "You haven't created any campaigns yet"
-                    : `No ${activeTab} campaigns`}
-                </p>
-                <Button onClick={() => navigate('/app/promotions')}>
-                  Create Your First Campaign
-                </Button>
-              </Card>
+              <EmptyState title={`No ${activeTab} campaigns`} body="Campaigns move here as their status changes." secondary={{ label: 'Show all campaigns', onClick: () => setActiveTab('all') }} />
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {filteredCampaigns.map((campaign) => (

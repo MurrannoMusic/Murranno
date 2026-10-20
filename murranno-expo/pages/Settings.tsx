@@ -1,407 +1,572 @@
-import React, { useState, useMemo } from 'react';
+import { appRedirect } from "@/lib/auth";
+import { FormField } from "@/components/forms/FormField";
+import { matches, password as passwordRule } from "@/lib/validation";
+import React, { useCallback, useState } from "react";
 import {
-    View, Text, ScrollView, StyleSheet, StatusBar,
-    Pressable, Switch, Alert,
-} from 'react-native';
-import {
-    User, Mail, Lock, CreditCard, Shield, Bell, Sun,
-    HelpCircle, Info, LogOut, Trash2, ChevronRight,
-    ExternalLink, Moon, Monitor, RefreshCw,
-} from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  StatusBar,
+  Pressable,
+  Switch,
+  TextInput,
+  ActivityIndicator,
+  Linking,
+  Platform,
+} from "react-native";
+import { ChevronRight, Sun, Moon, Monitor } from "lucide-react-native";
+import { useRouter, useFocusEffect } from "expo-router";
+import Constants from "expo-constants";
+import { useTheme } from "@/hooks/useTheme";
+import { useThemeContext, ThemeMode } from "@/contexts/ThemeContext";
+import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { supabase } from "@/integrations/supabase/client";
+import { invoke, changeCredentials, notify, confirmAction } from "@/lib/api";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { FormDialog } from "@/components/ui/FormDialog";
+import { registerDevicePush } from "@/lib/push";
 
-import { useTheme } from '@/hooks/useTheme';
-import { useThemeContext, ThemeMode } from '@/contexts/ThemeContext';
-import { supabase } from '@/integrations/supabase/client';
-import { AppHeader } from '@/components/layout/AppHeader';
-
-// ─── sub-components ──────────────────────────────────────────────────────────
-
-const SectionHeader = ({ icon: Icon, label, colors }: { icon: any; label: string; colors: any }) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4 }}>
-        <Icon size={15} color={colors.mutedForeground} />
-        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.mutedForeground, letterSpacing: 0.8, textTransform: 'uppercase' }}>
-            {label}
-        </Text>
-    </View>
-);
-
-// ─── component ────────────────────────────────────────────────────────────────
-
+const NOTIFICATIONS = [
+  { key: "email_notifications", label: "Email notifications" },
+  { key: "push_notifications", label: "Push notifications" },
+  { key: "in_app_notifications", label: "In-app notifications" },
+  { key: "release_updates", label: "Release updates" },
+  { key: "campaign_updates", label: "Campaign updates" },
+  { key: "earnings_alerts", label: "Earnings alerts" },
+  { key: "marketing_emails", label: "Marketing emails" },
+];
 export const Settings = () => {
-    const router = useRouter();
-    const { colors, isDark } = useTheme();
-    const { themeMode, setThemeMode } = useThemeContext();
-    const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-
-    const [notifs, setNotifs] = useState({
-        email:    true,
-        push:     true,
-        inApp:    true,
-        releases: true,
-        campaign: true,
-        earnings: true,
-        marketing:false,
-    });
-
-    const toggle = (key: keyof typeof notifs) =>
-        setNotifs((prev) => ({ ...prev, [key]: !prev[key] }));
-
-    const handleLogout = async () => {
-        Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Sign Out', style: 'destructive',
-                onPress: async () => {
-                    await supabase.auth.signOut();
-                    router.replace('/sign-in' as any);
-                },
-            },
-        ]);
-    };
-
-    const handleDeleteAccount = () => {
-        Alert.alert(
-            'Delete Account',
-            'This action is permanent. All your data, including music and earnings, will be wiped immediately. Are you sure?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { 
-                    text: 'Delete', 
-                    style: 'destructive', 
-                    onPress: async () => {
-                        try {
-                            const { data, error } = await supabase.functions.invoke('delete-account');
-                            if (error) throw error;
-                            if (data?.success) {
-                                Alert.alert('Success', 'Account deletion request submitted. You will be signed out.');
-                                await supabase.auth.signOut();
-                                router.replace('/sign-in' as any);
-                            } else {
-                                Alert.alert('Request Submitted', 'Please contact support@murrannomusic.co to complete your deletion.');
-                            }
-                        } catch (err) {
-                            Alert.alert('Error', 'Failed to initiate deletion. Please email support@murrannomusic.co');
-                        }
-                    } 
-                },
-            ],
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const { themeMode, setThemeMode } = useThemeContext();
+  const { subscriptions, refetch: refreshSubscriptions } = useSubscriptions();
+  const [profile, setProfile] = useState<any>(null);
+  const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [savingPreference, setSavingPreference] = useState<string | null>(null);
+  const [config, setConfig] = useState<any>(null);
+  const [dialog, setDialog] = useState<
+    "email" | "password" | "pin" | "security" | null
+  >(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [events, setEvents] = useState<any[]>([]);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [p, n, c] = await Promise.all([
+        invoke("get-profile"),
+        invoke("get-notification-preferences"),
+        invoke("get-mobile-config"),
+      ]);
+      setProfile(p.profile);
+      setPrefs(n.preferences);
+      setConfig(c);
+    } catch (e: any) {
+      setLoadError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+      refreshSubscriptions();
+    }, [refresh, refreshSubscriptions]),
+  );
+  const open = (kind: typeof dialog) => {
+    setFields({});
+    setError("");
+    setDialog(kind);
+  };
+  const input = (
+    name: string,
+    label: string,
+    secure = false,
+    numeric = false,
+  ) => (
+    <FormField
+      key={name}
+      label={label}
+      password={secure}
+      value={fields[name] || ""}
+      onChangeText={(v) => { setFields((f) => ({ ...f, [name]: numeric ? v.replace(/\D/g, "") : v })); setError(""); }}
+      autoCapitalize="none"
+      keyboardType={numeric ? "number-pad" : name === "email" ? "email-address" : "default"}
+      maxLength={numeric ? 4 : undefined}
+    />
+  );
+  const save = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      if (dialog === "pin") {
+        if (!/^\d{4}$/.test(fields.pin || ""))
+          throw Error("Enter a 4-digit PIN.");
+        if (fields.pin !== fields.confirm) throw Error("PINs must match.");
+        await invoke("setup-transaction-pin", {
+          pin: fields.pin,
+          ...(profile?.transaction_pin_hash
+            ? { current_pin: fields.current }
+            : {}),
+        });
+      } else {
+        if (!fields.current) throw Error("Enter your current password.");
+        if (dialog === "email") {
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email || ""))
+            throw Error("Enter a valid email address.");
+          await changeCredentials(
+            { email: fields.email.trim(), current_password: fields.current },
+            appRedirect("auth/callback"),
+          );
+        } else {
+          const problem = passwordRule(fields.password || "") || matches(fields.password || "")(fields.confirm || "");
+          if (problem) throw Error(problem);
+          await changeCredentials({
+            password: fields.password,
+            current_password: fields.current,
+          });
+        }
+      }
+      setDialog(null);
+      await refresh();
+      notify(
+        "Saved",
+        dialog === "email"
+          ? "Check your new email address for a confirmation link."
+          : dialog === "pin"
+            ? "Your transaction PIN has been saved."
+            : "Your password has been updated.",
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = async (key: string, value: boolean) => {
+    const previous = prefs[key];
+    setSavingPreference(key);
+    setPrefs((p) => ({ ...p, [key]: value }));
+    try {
+      if (key === "push_notifications" && value) {
+        if (!config?.pushEnabled)
+          throw Error(
+            "Push delivery is not available yet. Other notification channels are available.",
+          );
+        await registerDevicePush(true);
+      }
+      const result = await invoke("update-notification-preferences", {
+        [key]: value,
+      });
+      setPrefs(result.preferences);
+    } catch (e: any) {
+      setPrefs((p) => ({ ...p, [key]: previous }));
+      notify("Preference not saved", e.message);
+    } finally {
+      setSavingPreference(null);
+    }
+  };
+  const row = (label: string, onPress: () => void, detail?: string) => (
+    <Pressable
+      key={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[s.row, { borderBottomColor: colors.border }]}
+    >
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={{ color: colors.foreground, fontSize: 15 }}>{label}</Text>
+        {!!detail && (
+          <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+            {detail}
+          </Text>
+        )}
+      </View>
+      <ChevronRight size={18} color={colors.mutedForeground} />
+    </Pressable>
+  );
+  const section = (label: string, children: React.ReactNode) => (
+    <View style={{ gap: 8 }}>
+      <Text
+        style={{
+          color: colors.mutedForeground,
+          fontSize: 12,
+          fontWeight: "600",
+          letterSpacing: 0.6,
+        }}
+      >
+        {label.toUpperCase()}
+      </Text>
+      <View
+        style={{
+          backgroundColor: colors.card,
+          borderRadius: 10,
+          paddingHorizontal: 16,
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+  const checkUpdates = async () => {
+    try {
+      const c = await invoke("get-mobile-config");
+      const installed = Constants.expoConfig?.version || "1.0.0";
+      if (!c.latestVersion) {
+        notify(
+          "Update information unavailable",
+          "Release information has not been published yet.",
         );
-    };
-
-    const NOTIF_ROWS: { key: keyof typeof notifs; label: string; sub: string }[] = [
-        { key: 'email',     label: 'Email Notifications',  sub: 'Receive updates via email' },
-        { key: 'push',      label: 'Push Notifications',   sub: 'Get real-time alerts' },
-        { key: 'inApp',     label: 'In-App Notifications', sub: 'Show alerts in app' },
-        { key: 'releases',  label: 'Release Updates',      sub: 'Track status changes' },
-        { key: 'campaign',  label: 'Campaign Updates',     sub: 'Promotion updates' },
-        { key: 'earnings',  label: 'Earnings Alerts',      sub: 'Payment notifications' },
-        { key: 'marketing', label: 'Marketing Emails',     sub: 'Product offers' },
-    ];
-
-    const THEME_PILLS: { mode: ThemeMode; Icon: any; label: string }[] = [
-        { mode: 'light',  Icon: Sun,     label: 'Light'  },
-        { mode: 'dark',   Icon: Moon,    label: 'Dark'   },
-        { mode: 'system', Icon: Monitor, label: 'System' },
-    ];
-
-    return (
-        <View style={s.screen}>
-            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-            <AppHeader />
-
-            <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-
-                {/* Back */}
-                <Pressable style={s.back} onPress={() => router.back()}>
-                    <ChevronRight size={16} color={colors.foreground} style={{ transform: [{ rotate: '180deg' }] }} />
-                    <Text style={s.backText}>Back</Text>
+        return;
+      }
+      const parts = (v: string) => v.split(".").map(Number);
+      const a = parts(c.latestVersion),
+        b = parts(installed);
+      let newer = false;
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((a[i] || 0) !== (b[i] || 0)) {
+          newer = (a[i] || 0) > (b[i] || 0);
+          break;
+        }
+      }
+      if (!newer) {
+        notify(
+          "Up to date",
+          `Version ${installed} is the current published release.`,
+        );
+        return;
+      }
+      const url = c.storeUrls?.[Platform.OS];
+      if (
+        url &&
+        /^https:\/\//.test(url) &&
+        (await confirmAction(
+          "Update available",
+          `Version ${c.latestVersion} is available. Open the store?`,
+        ))
+      )
+        await Linking.openURL(url);
+      else
+        notify(
+          "Update available",
+          `Version ${c.latestVersion} is available. Contact support for the download link.`,
+        );
+    } catch (e: any) {
+      notify("Could not check updates", e.message);
+    }
+  };
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <AppHeader />
+      <ScrollView contentContainerStyle={s.content}>
+        <Text
+          style={{
+            color: colors.foreground,
+            fontSize: 32,
+            fontWeight: "700",
+            letterSpacing: -1,
+          }}
+        >
+          Settings
+        </Text>
+        {section(
+          "Appearance",
+          <View style={{ paddingVertical: 16, gap: 12 }}>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 16,
+                fontWeight: "600",
+              }}
+            >
+              Choose your theme
+            </Text>
+            <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>
+              Your choice is saved on this device.
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {(
+                [
+                  { mode: "light", Icon: Sun, label: "Light" },
+                  { mode: "dark", Icon: Moon, label: "Dark" },
+                  { mode: "system", Icon: Monitor, label: "System" },
+                ] as { mode: ThemeMode; Icon: any; label: string }[]
+              ).map(({ mode, Icon, label }) => (
+                <Pressable
+                  key={mode}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`${label} theme`}
+                  accessibilityState={{ checked: themeMode === mode }}
+                  aria-checked={themeMode === mode}
+                  onPress={() => setThemeMode(mode)}
+                  style={{
+                    flex: 1,
+                    minHeight: 48,
+                    borderRadius: 8,
+                    backgroundColor:
+                      themeMode === mode
+                        ? `${colors.primary}20`
+                        : colors.secondary,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Icon
+                    size={16}
+                    color={
+                      themeMode === mode
+                        ? colors.primary
+                        : colors.mutedForeground
+                    }
+                  />
+                  <Text
+                    style={{
+                      color:
+                        themeMode === mode
+                          ? colors.primary
+                          : colors.mutedForeground,
+                      fontSize: 12,
+                    }}
+                  >
+                    {label}
+                  </Text>
                 </Pressable>
-
-                {/* ── Account ──────────────────────────────────────────────── */}
-                <SectionHeader icon={User} label="Account" colors={colors} />
-                <View style={s.card}>
-                    {[
-                        { label: 'Edit Profile',     onPress: () => router.push('/app/profile' as any) },
-                        { label: 'Change Email',     onPress: () => Alert.alert('Change Email', 'Email change will be sent to your current address.') },
-                        { label: 'Change Password',  onPress: () => Alert.alert('Change Password', 'A password reset link will be sent to your email.') },
-                    ].map(({ label, onPress }, i, arr) => (
-                        <Pressable key={label} style={[s.row, i < arr.length - 1 && s.rowBorder]} onPress={onPress}>
-                            <Text style={s.rowLabel}>{label}</Text>
-                            <ChevronRight size={16} color={colors.mutedForeground} />
-                        </Pressable>
-                    ))}
-                </View>
-
-                {/* ── Subscription ─────────────────────────────────────────── */}
-                <SectionHeader icon={CreditCard} label="Subscription" colors={colors} />
-                <View style={s.card}>
-                    <View style={s.subEmpty}>
-                        <View style={s.subEmptyIcon}>
-                            <CreditCard size={20} color={colors.mutedForeground} />
-                        </View>
-                        <Text style={s.subEmptyTitle}>No Active Subscription</Text>
-                        <Text style={s.subEmptySub}>Upgrade to unlock premium features</Text>
-                    </View>
-                    <Pressable
-                        style={s.primaryBtn}
-                        onPress={() => Alert.alert('View Plans', 'Subscription plans coming soon.')}
-                    >
-                        <Text style={s.primaryBtnText}>View Plans</Text>
-                    </Pressable>
-                </View>
-
-                {/* ── Security ─────────────────────────────────────────────── */}
-                <SectionHeader icon={Shield} label="Security" colors={colors} />
-                <View style={s.card}>
-                    <View style={[s.row, s.rowBorder]}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={s.rowLabel}>Transaction PIN</Text>
-                            <Text style={s.rowSub}>PIN not set</Text>
-                            <Text style={[s.rowSub, { marginTop: 4, fontSize: 11 }]}>
-                                Required for withdrawals and bank account modifications.
-                            </Text>
-                        </View>
-                        <Pressable
-                            style={s.outlineBtn}
-                            onPress={() => {
-                                const setPin = async (pin: string) => {
-                                    if (pin.length !== 4 || !/^\d+$/.test(pin)) {
-                                        Alert.alert('Invalid PIN', 'Please enter a 4-digit numeric PIN');
-                                        return;
-                                    }
-                                    try {
-                                        const { data, error } = await supabase.functions.invoke('setup-transaction-pin', {
-                                            body: { pin }
-                                        });
-                                        if (error) throw error;
-                                        if (data?.success) {
-                                            Alert.alert('Success', 'Transaction PIN set successfully');
-                                        }
-                                    } catch (err) {
-                                        Alert.alert('Error', 'Failed to set PIN');
-                                    }
-                                };
-
-                                if (require('react-native').Platform.OS === 'ios') {
-                                    Alert.prompt('Set PIN', 'Enter a 4-digit numeric PIN', [
-                                        { text: 'Cancel', style: 'cancel' },
-                                        { text: 'Set', onPress: (pin) => setPin(pin || '') }
-                                    ], 'secure-text');
-                                } else {
-                                    // For Android, we'd ideally use a Modal, but for a quick fix:
-                                    Alert.alert('Set PIN', 'Please contact support to set your PIN or use the iOS app/Web version.');
-                                }
-                            }}
-                        >
-                            <Text style={s.outlineBtnText}>Set PIN</Text>
-                        </Pressable>
-                    </View>
-                    <Pressable style={s.row} onPress={() => Alert.alert('Security Activity', 'No recent security events.')}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={s.rowLabel}>Recent Security Activity</Text>
-                        </View>
-                        <Text style={s.showText}>Show</Text>
-                    </Pressable>
-                </View>
-
-                {/* ── Notifications ────────────────────────────────────────── */}
-                <SectionHeader icon={Bell} label="Notifications" colors={colors} />
-                <View style={s.card}>
-                    {NOTIF_ROWS.map(({ key, label, sub }, i) => (
-                        <View key={key} style={[s.row, i < NOTIF_ROWS.length - 1 && s.rowBorder]}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={s.rowLabel}>{label}</Text>
-                                <Text style={s.rowSub}>{sub}</Text>
-                            </View>
-                            <Switch
-                                value={notifs[key]}
-                                onValueChange={() => toggle(key)}
-                                trackColor={{ false: colors.border, true: colors.primaryGlow }}
-                                thumbColor="#fff"
-                            />
-                        </View>
-                    ))}
-                </View>
-
-                {/* ── Appearance ───────────────────────────────────────────── */}
-                <SectionHeader icon={Sun} label="Appearance" colors={colors} />
-                <View style={s.card}>
-                    <View style={s.themeRow}>
-                        {THEME_PILLS.map(({ mode, Icon, label }) => (
-                            <Pressable
-                                key={mode}
-                                style={[s.themePill, themeMode === mode && s.themePillActive]}
-                                onPress={() => setThemeMode(mode)}
-                            >
-                                <Icon
-                                    size={15}
-                                    color={themeMode === mode ? colors.primaryGlow : colors.mutedForeground}
-                                />
-                                <Text style={[s.themePillText, themeMode === mode && s.themePillTextActive]}>
-                                    {label}
-                                </Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                </View>
-
-                {/* ── App Icon Badges ──────────────────────────────────────── */}
-                <SectionHeader icon={Bell} label="App Icon Badges" colors={colors} />
-                <View style={s.card}>
-                    <Text style={[s.rowSub, { paddingVertical: 6 }]}>
-                        Badge notifications are only available in the native mobile app
-                    </Text>
-                </View>
-
-                {/* ── Help & Support ───────────────────────────────────────── */}
-                <SectionHeader icon={HelpCircle} label="Help & Support" colors={colors} />
-                <View style={s.card}>
-                    {[
-                        { label: 'FAQs',             route: '/app/faq'     },
-                        { label: 'Contact Support',  route: '/app/support' },
-                        { label: 'Terms of Service', route: '/app/terms'   },
-                        { label: 'Privacy Policy',   route: '/app/privacy' },
-                    ].map(({ label, route }, i, arr) => (
-                        <Pressable
-                            key={label}
-                            style={[s.row, i < arr.length - 1 && s.rowBorder]}
-                            onPress={() => router.push(route as any)}
-                        >
-                            <Text style={s.rowLabel}>{label}</Text>
-                            <ExternalLink size={15} color={colors.mutedForeground} />
-                        </Pressable>
-                    ))}
-                </View>
-
-                {/* ── App Info ─────────────────────────────────────────────── */}
-                <SectionHeader icon={Info} label="App Info" colors={colors} />
-                <View style={s.card}>
-                    <View style={[s.row, s.rowBorder]}>
-                        <Text style={s.rowLabel}>Version</Text>
-                        <Text style={s.rowMeta}>1.0.0</Text>
-                    </View>
-                    <Pressable
-                        style={s.row}
-                        onPress={() => Alert.alert('Check Updates', 'You are on the latest version.')}
-                    >
-                        <RefreshCw size={15} color={colors.mutedForeground} />
-                        <Text style={[s.rowLabel, { marginLeft: 8 }]}>Check Updates</Text>
-                    </Pressable>
-                </View>
-
-                {/* ── Sign Out ─────────────────────────────────────────────── */}
-                <Pressable style={s.signOutBtn} onPress={handleLogout}>
-                    <LogOut size={16} color={colors.foreground} />
-                    <Text style={s.signOutText}>Sign Out</Text>
-                </Pressable>
-
-                {/* ── Danger Zone ──────────────────────────────────────────── */}
-                <View style={s.dangerCard}>
-                    <View style={s.dangerHeader}>
-                        <Trash2 size={15} color={colors.destructive} />
-                        <Text style={s.dangerTitle}>Danger Zone</Text>
-                    </View>
-                    <Text style={s.dangerSub}>
-                        Deleting your account is permanent. All your data, including music and earnings, will be wiped immediately.
-                    </Text>
-                    <Pressable style={s.deleteBtn} onPress={handleDeleteAccount}>
-                        <Text style={s.deleteBtnText}>Delete Account</Text>
-                    </Pressable>
-                </View>
-
-                <View style={{ height: 40 }} />
-            </ScrollView>
-        </View>
-    );
+              ))}
+            </View>
+          </View>,
+        )}
+        {loading && <ActivityIndicator color={colors.primary} />}
+        {!!loadError && (
+          <Pressable onPress={refresh}>
+            <Text style={{ color: colors.destructive }}>
+              {loadError} Tap to retry.
+            </Text>
+          </Pressable>
+        )}
+        {section(
+          "Account",
+          <>
+            {row("Edit profile", () => router.push("/app/profile"))}
+            {row("Change email", () => open("email"), profile?.email)}
+            {row("Change password", () => open("password"))}
+          </>,
+        )}
+        {section(
+          "Subscription",
+          <>
+            {subscriptions
+              .filter((v) => v.isActive)
+              .map((v) => (
+                <Text
+                  key={v.id}
+                  style={{ color: colors.foreground, paddingVertical: 12 }}
+                >
+                  {v.plan_name} · {v.status}
+                </Text>
+              ))}
+            {row(
+              "Plans and subscriptions",
+              () => router.push("/app/subscriptions"),
+              subscriptions.some((v) => v.isActive)
+                ? "Manage your access"
+                : "Artist plan · free",
+            )}
+          </>,
+        )}
+        {section(
+          "Security",
+          <>
+            {row(
+              profile?.transaction_pin_hash
+                ? "Change transaction PIN"
+                : "Set transaction PIN",
+              () => open("pin"),
+              profile?.transaction_pin_hash
+                ? "A PIN is set"
+                : "Required to withdraw earnings",
+            )}
+            {row("Recent security activity", async () => {
+              open("security");
+              setBusy(true);
+              try {
+                const { data, error: e } = await supabase
+                  .from("security_logs")
+                  .select("id,event,created_at,ip_address")
+                  .order("created_at", { ascending: false })
+                  .limit(20);
+                if (e) throw e;
+                setEvents(data || []);
+              } catch (e: any) {
+                setError(e.message);
+              } finally {
+                setBusy(false);
+              }
+            })}
+          </>,
+        )}
+        {row("Notification inbox", () =>
+          router.push("/app/notifications" as any),
+        )}
+        {section(
+          "Notifications",
+          NOTIFICATIONS.map(({ key, label }) => (
+            <View
+              key={key}
+              style={[s.row, { borderBottomColor: colors.border }]}
+            >
+              <Text style={{ flex: 1, color: colors.foreground, fontSize: 14 }}>
+                {label}
+              </Text>
+              <Switch
+                accessibilityLabel={label}
+                value={!!prefs[key]}
+                disabled={loading || !!loadError || savingPreference !== null}
+                onValueChange={(v) => toggle(key, v)}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
+          )),
+        )}
+        {section(
+          "Explore",
+          <>
+            {row("Campaigns", () => router.push("/app/campaigns"))}
+            {row("Your music", () => router.push("/app/music"))}
+          </>,
+        )}
+        {section(
+          "Help and support",
+          <>
+            {row("FAQs", () => router.push("/app/faq"))}
+            {row("Contact support", () => router.push("/app/support"))}
+            {row("Terms of service", () => router.push("/app/terms"))}
+            {row("Privacy policy", () => router.push("/app/privacy"))}
+          </>,
+        )}
+        {section(
+          "App",
+          <>
+            {row(
+              "Check for updates",
+              checkUpdates,
+              `Installed version ${Constants.expoConfig?.version || "1.0.0"}`,
+            )}
+          </>,
+        )}
+        {row("Sign out", async () => {
+          if (await confirmAction("Sign out", "Sign out of your account?")) {
+            const { error: e } = await supabase.auth.signOut();
+            if (e) notify("Could not sign out", e.message);
+            else router.replace("/sign-in");
+          }
+        })}
+        <Pressable
+          accessibilityRole="button"
+          onPress={async () => {
+            if (
+              !(await confirmAction(
+                "Delete account",
+                "This permanently deletes your account. Withdraw your balance first. Continue?",
+              ))
+            )
+              return;
+            try {
+              await invoke("delete-account");
+              await supabase.auth.signOut();
+              router.replace("/sign-in");
+            } catch (e: any) {
+              notify("Account not deleted", e.message);
+            }
+          }}
+          style={{ paddingVertical: 16 }}
+        >
+          <Text style={{ color: colors.destructive, fontSize: 15 }}>
+            Delete account
+          </Text>
+        </Pressable>
+      </ScrollView>
+      <FormDialog
+        visible={!!dialog}
+        title={
+          dialog === "email"
+            ? "Change email"
+            : dialog === "password"
+              ? "Change password"
+              : dialog === "pin"
+                ? "Transaction PIN"
+                : "Security activity"
+        }
+        error={error}
+        busy={busy}
+        onClose={() => setDialog(null)}
+        onSubmit={dialog === "security" ? undefined : save}
+      >
+        {dialog === "email" && (
+          <>
+            {input("email", "New email")}
+            {input("current", "Current password", true)}
+          </>
+        )}
+        {dialog === "password" && (
+          <>
+            {input("current", "Current password", true)}
+            {input("password", "New password", true)}
+            {input("confirm", "Confirm new password", true)}
+          </>
+        )}
+        {dialog === "pin" && (
+          <>
+            {profile?.transaction_pin_hash &&
+              input("current", "Current PIN", true, true)}
+            {input("pin", "New PIN", true, true)}
+            {input("confirm", "Confirm PIN", true, true)}
+          </>
+        )}
+        {dialog === "security" &&
+          (busy ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : events.length ? (
+            events.map((e) => (
+              <View key={e.id} style={{ paddingVertical: 10, gap: 4 }}>
+                <Text style={{ color: colors.foreground }}>{e.event}</Text>
+                <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                  {new Date(e.created_at).toLocaleString()} ·{" "}
+                  {e.ip_address || "Unknown device"}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={{ color: colors.mutedForeground }}>
+              No security events have been recorded.
+            </Text>
+          ))}
+      </FormDialog>
+    </View>
+  );
 };
-
-// ─── styles ───────────────────────────────────────────────────────────────────
-
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boolean) {
-    return StyleSheet.create({
-        screen:       { flex: 1, backgroundColor: colors.background },
-        scroll:       { flex: 1 },
-        scrollContent:{ paddingHorizontal: 16, paddingTop: 8, gap: 6, paddingBottom: 40 },
-
-        back: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, marginBottom: 8 },
-        backText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
-
-        card: {
-            backgroundColor: colors.card, borderRadius: 16,
-            borderWidth: 1, borderColor: colors.border,
-            marginBottom: 8, overflow: 'hidden',
-        },
-
-        row: {
-            flexDirection: 'row', alignItems: 'center',
-            paddingHorizontal: 16, paddingVertical: 14, gap: 10,
-        },
-        rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-        rowLabel: { flex: 1, fontSize: 14, color: colors.foreground },
-        rowSub:   { fontSize: 12, color: colors.mutedForeground, marginTop: 1 },
-        rowMeta:  { fontSize: 14, color: colors.mutedForeground },
-        showText: { fontSize: 13, fontWeight: '600', color: colors.primaryGlow },
-
-        // Subscription
-        subEmpty: { alignItems: 'center', paddingTop: 20, paddingBottom: 12, gap: 6 },
-        subEmptyIcon: {
-            width: 44, height: 44, borderRadius: 22,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-            justifyContent: 'center', alignItems: 'center',
-            marginBottom: 4,
-        },
-        subEmptyTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
-        subEmptySub:   { fontSize: 13, color: colors.mutedForeground },
-        primaryBtn: {
-            backgroundColor: colors.primaryGlow, marginHorizontal: 16, marginBottom: 16,
-            borderRadius: 12, paddingVertical: 13, alignItems: 'center',
-        },
-        primaryBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
-
-        // Security
-        outlineBtn: {
-            borderWidth: 1, borderColor: colors.primaryGlow, borderRadius: 10,
-            paddingHorizontal: 14, paddingVertical: 7,
-        },
-        outlineBtnText: { fontSize: 13, fontWeight: '600', color: colors.primaryGlow },
-
-        // Appearance
-        themeRow: { flexDirection: 'row', gap: 8, padding: 14 },
-        themePill: {
-            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-            paddingVertical: 10, borderRadius: 10,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-        },
-        themePillActive: { backgroundColor: `${colors.primaryGlow}22`, borderWidth: 1, borderColor: `${colors.primaryGlow}60` },
-        themePillText:   { fontSize: 12, fontWeight: '600', color: colors.mutedForeground },
-        themePillTextActive: { color: colors.primaryGlow },
-
-        // Help rows
-        helpRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-
-        // Sign Out
-        signOutBtn: {
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-            backgroundColor: colors.card, borderRadius: 16,
-            borderWidth: 1, borderColor: colors.border,
-            paddingVertical: 14, marginBottom: 8,
-        },
-        signOutText: { fontSize: 15, fontWeight: '600', color: colors.foreground },
-
-        // Danger Zone
-        dangerCard: {
-            backgroundColor: `${colors.destructive}0f`,
-            borderWidth: 1, borderColor: `${colors.destructive}30`,
-            borderRadius: 16, padding: 16, gap: 10,
-        },
-        dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-        dangerTitle:  { fontSize: 14, fontWeight: '700', color: colors.destructive },
-        dangerSub:    { fontSize: 12, color: colors.mutedForeground, lineHeight: 18 },
-        deleteBtn: {
-            backgroundColor: colors.destructive, borderRadius: 12,
-            paddingVertical: 13, alignItems: 'center',
-        },
-        deleteBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
-    });
-}
+const s = StyleSheet.create({
+  content: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+    padding: 24,
+    paddingTop: 4,
+    paddingBottom: 40,
+    gap: 24,
+  },
+  row: {
+    minHeight: 56,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+});

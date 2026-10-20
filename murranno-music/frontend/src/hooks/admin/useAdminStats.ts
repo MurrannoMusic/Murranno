@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { AdminAnalytics } from '@/types/admin';
 
 export function useAdminStats() {
-    const { data: analytics, isLoading } = useQuery({
+    const { data: analytics, isLoading, error, refetch } = useQuery({
         queryKey: ['admin-platform-analytics'],
         queryFn: async () => {
             const { data, error } = await supabase.functions.invoke('admin-get-platform-analytics');
@@ -15,5 +15,7 @@ export function useAdminStats() {
     return {
         analytics,
         isLoading,
+        error,
+        refetch,
     };
 }

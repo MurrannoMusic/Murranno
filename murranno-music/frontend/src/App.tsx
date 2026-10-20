@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { CurrencyProvider } from "./contexts/CurrencyContext";
@@ -20,6 +20,8 @@ import { AppLayout } from "./layouts/AppLayout";
 import { AppLayoutNoHeader } from "./layouts/AppLayoutNoHeader";
 import KYCVerification from "./pages/KYCVerification";
 import { KYCProtected } from "./components/auth/KYCProtected";
+import { isNativeApp } from "./utils/platformDetection";
+import { RouteScrollReset } from "./components/RouteScrollReset";
 
 // Lazy load pages for performance
 const Splash = lazy(() => import("./pages/Splash").then(module => ({ default: module.Splash })));
@@ -29,6 +31,25 @@ const Signup = lazy(() => import("./pages/Signup").then(module => ({ default: mo
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail").then(module => ({ default: module.VerifyEmail })));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then(module => ({ default: module.ForgotPassword })));
 const ResetPassword = lazy(() => import("./pages/ResetPassword").then(module => ({ default: module.ResetPassword })));
+const MarketingDistribution = lazy(() => import("./pages/marketing/Distribution"));
+const MarketingPromotions = lazy(() => import("./pages/marketing/Promotions"));
+const MarketingArtistProfiles = lazy(() => import("./pages/marketing/ArtistProfiles"));
+const MarketingAbout = lazy(() => import("./pages/marketing/About"));
+const MarketingContact = lazy(() => import("./pages/marketing/Contact"));
+const MarketingDownload = lazy(() => import("./pages/marketing/Download"));
+const MarketingJournal = lazy(() => import("./pages/marketing/Journal"));
+const MarketingJournalArticle = lazy(() => import("./pages/marketing/JournalArticle"));
+// murrannomusic.co serves the marketing site at "/"; app.murrannomusic.co goes straight into the app.
+const MARKETING_HOST = typeof window !== "undefined" && /^((www|landing)\.)?murrannomusic\.(co|localhost)$/.test(window.location.hostname); // .localhost: build-time prerender
+// On the marketing hosts, account pages (login, signup, the app itself) live on app.murrannomusic.co.
+const APP_ONLY_PATH = /^\/(app|admin|login|signup|welcome|forgot-password|reset-password|verify-email|auth|subscription|support|kyc|settings|profile|dashboard|upload|releases|earnings|analytics)(\/|$)/;
+function AppHostRedirect() {
+  const { pathname, search, hash } = useLocation();
+  useEffect(() => {
+    if (MARKETING_HOST && APP_ONLY_PATH.test(pathname)) window.location.replace(`https://app.murrannomusic.co${pathname}${search}${hash}`);
+  }, [pathname, search, hash]);
+  return null;
+}
 const DesktopLanding = lazy(() => import("./pages/DesktopLanding").then(module => ({ default: module.DesktopLanding })));
 const AuthCallback = lazy(() => import("./pages/AuthCallback").then(module => ({ default: module.AuthCallback })));
 const Dashboard = lazy(() => import("./pages/Dashboard").then(module => ({ default: module.Dashboard })));
@@ -116,22 +137,52 @@ const DeepLinkInitializer = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="dark" storageKey="murranno-ui-theme">
+    <ThemeProvider defaultTheme="system" storageKey="murranno-ui-theme">
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <NetworkStatus />
         <AppUpdateBanner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <RouteScrollReset />
+          <AppHostRedirect />
+          <NetworkStatus />
           <AuthProvider>
             <CurrencyProvider>
               <PushNotificationProvider>
                 <DeepLinkInitializer />
                 <Routes>
-                  <Route path="/" element={<Navigate to="/signup" replace />} />
-                  <Route path="/desktop" element={<Suspense fallback={<PageLoader />}><DesktopLanding /></Suspense>} />
-                  <Route path="/splash" element={<MobileOnlyRoute><Suspense fallback={<PageLoader />}><Splash /></Suspense></MobileOnlyRoute>} />
-                  <Route path="/welcome" element={<MobileOnlyRoute><Suspense fallback={<PageLoader />}><Welcome /></Suspense></MobileOnlyRoute>} />
+                  {/* The marketing site will live on murrannomusic.co; app.* goes straight into the app (login when signed out). */}
+                  {/* murrannomusic.co (and www/landing) open on the marketing landing; app.murrannomusic.co is the web app. */}
+                  <Route path="/" element={MARKETING_HOST ? <Suspense fallback={<PageLoader />}><DesktopLanding /></Suspense> : <Navigate to={isNativeApp() ? "/welcome" : "/app"} replace />} />
+                  <Route path="/desktop" element={<Navigate to="/app" replace />} />
+                  <Route path="/landing" element={<Suspense fallback={<PageLoader />}><DesktopLanding /></Suspense>} />
+                  {/* Marketing site (murrannomusic.co). Old WordPress addresses redirect to their new pages. */}
+                  <Route path="/distribution" element={<Suspense fallback={<PageLoader />}><MarketingDistribution /></Suspense>} />
+                  <Route path="/promotions" element={<Suspense fallback={<PageLoader />}><MarketingPromotions /></Suspense>} />
+                  <Route path="/artist-profiles" element={<Suspense fallback={<PageLoader />}><MarketingArtistProfiles /></Suspense>} />
+                  <Route path="/about" element={<Suspense fallback={<PageLoader />}><MarketingAbout /></Suspense>} />
+                  <Route path="/contact" element={<Suspense fallback={<PageLoader />}><MarketingContact /></Suspense>} />
+                  <Route path="/download" element={<Suspense fallback={<PageLoader />}><MarketingDownload /></Suspense>} />
+                  <Route path="/journal" element={<Suspense fallback={<PageLoader />}><MarketingJournal /></Suspense>} />
+                  <Route path="/journal/:slug" element={<Suspense fallback={<PageLoader />}><MarketingJournalArticle /></Suspense>} />
+                  <Route path="/read-music" element={<Navigate to="/journal" replace />} />
+                  <Route path="/blog" element={<Navigate to="/journal" replace />} />
+                  <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
+                  <Route path="/terms-and-conditions" element={<Navigate to="/terms" replace />} />
+                  <Route path="/nigerian-music-meets-global-fashion" element={<Navigate to="/journal/nigerian-music-meets-global-fashion" replace />} />
+                  <Route path="/vinvae-shares-transcendent-boundary-defying-debut-album-when-my-life-began" element={<Navigate to="/journal/vinvae-shares-transcendent-boundary-defying-debut-album-when-my-life-began" replace />} />
+                  <Route path="/5-ways-to-develop-your-skills-as-a-songwriter" element={<Navigate to="/journal/5-ways-to-develop-your-skills-as-a-songwriter" replace />} />
+                  <Route path="/3-ways-to-embrace-a-curious-musical-mindset-for-songwriting" element={<Navigate to="/journal/3-ways-to-embrace-a-curious-musical-mindset-for-songwriting" replace />} />
+                  <Route path="/5-creative-ways-to-attract-new-fans" element={<Navigate to="/journal/5-creative-ways-to-attract-new-fans" replace />} />
+                  <Route path="/turning-negativity-into-creativity-in-songwriting" element={<Navigate to="/journal/turning-negativity-into-creativity-in-songwriting" replace />} />
+                  <Route path="/10-content-ideas-for-when-youre-stuck" element={<Navigate to="/journal/10-content-ideas-for-when-youre-stuck" replace />} />
+                  <Route path="/how-to-use-livestreaming-to-grow-your-music-career" element={<Navigate to="/journal/how-to-use-livestreaming-to-grow-your-music-career" replace />} />
+                  <Route path="/headies-2023-full-winners-list" element={<Navigate to="/journal/headies-2023-full-winners-list" replace />} />
+                  <Route path="/warner-music-group-blavatnik-family-foundation-social-justice-funds-sjf-repertoire-fund-announces-2023-grantees-in-africa" element={<Navigate to="/journal/warner-music-group-blavatnik-family-foundation-social-justice-funds-sjf-repertoire-fund-announces-2023-grantees-in-africa" replace />} />
+                  <Route path="/3-reasons-why-a-flexible-mindset-can-help-your-music-career" element={<Navigate to="/journal/3-reasons-why-a-flexible-mindset-can-help-your-music-career" replace />} />
+                  <Route path="/splash" element={isNativeApp() ? <Suspense fallback={<PageLoader />}><Splash /></Suspense> : <Navigate to="/signup" replace />} />
+                  <Route path="/welcome" element={isNativeApp() ? <Suspense fallback={<PageLoader />}><Welcome /></Suspense> : <Navigate to="/signup" replace />} />
+                  {import.meta.env.DEV && <Route path="/onboarding-preview" element={<Suspense fallback={<PageLoader />}><Welcome /></Suspense>} />}
                   {/* <Route path="/get-started" element={<MobileOnlyRoute><GetStarted /></MobileOnlyRoute>} /> */}
                   <Route path="/login" element={<Suspense fallback={<PageLoader />}><Login /></Suspense>} />
                   <Route path="/signup" element={<Suspense fallback={<PageLoader />}><Signup /></Suspense>} />
@@ -173,7 +224,7 @@ const App = () => (
                   </Route>
 
                   <Route path="/app/profile" element={<MobileOnlyRoute><ProtectedRoute><AppLayout /></ProtectedRoute></MobileOnlyRoute>}>
-                    <Route index element={<Suspense fallback={<PageLoader />}><Profile /></Suspense>} />
+                    <Route index element={<Suspense fallback={<PageLoader />}><ArtistProfile /></Suspense>} />
                   </Route>
 
                   <Route path="/app/settings" element={<MobileOnlyRoute><ProtectedRoute><AppLayout /></ProtectedRoute></MobileOnlyRoute>}>
@@ -268,7 +319,6 @@ const App = () => (
                   <Route path="/label-dashboard" element={<Navigate to="/app/label-dashboard" replace />} />
                   <Route path="/agency-dashboard" element={<Navigate to="/app/agency-dashboard" replace />} />
                   <Route path="/upload" element={<Navigate to="/app/upload" replace />} />
-                  <Route path="/promotions" element={<Navigate to="/app/promotions" replace />} />
                   <Route path="/earnings" element={<Navigate to="/app/earnings" replace />} />
                   <Route path="/analytics" element={<Navigate to="/app/analytics" replace />} />
                   <Route path="/label-analytics" element={<Navigate to="/app/label-analytics" replace />} />

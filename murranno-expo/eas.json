@@ -9,15 +9,18 @@
       "distribution": "internal"
     },
     "preview": {
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.murrannomusic.co" },
       "distribution": "internal"
     },
     "apk": {
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.murrannomusic.co" },
       "android": {
         "buildType": "apk"
       },
       "distribution": "internal"
     },
     "production": {
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.murrannomusic.co" },
       "autoIncrement": true
     }
   },

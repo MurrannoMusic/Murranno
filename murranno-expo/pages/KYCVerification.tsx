@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
-    Pressable, ActivityIndicator, TextInput, Alert, Image,
+    Pressable, ActivityIndicator, Image, Linking,
 } from 'react-native';
 import {
-    ShieldAlert, Shield, CheckCircle, Upload,
-    AlertCircle, Camera, ChevronRight, FileText,
+    CheckCircle, Upload,
+    Camera, ChevronRight, FileText,
     UserCheck, CreditCard, Landmark,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -16,6 +16,11 @@ import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/integrations/supabase/client';
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload';
 import { useArtistProfile } from '@/hooks/useArtistProfile';
+import { FormError, FormField } from '@/components/forms/FormField';
+import { friendlyError } from '@/components/states/StateViews';
+import { nin as ninRule } from '@/lib/validation';
+
+const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -36,13 +41,27 @@ export const KYCVerification = () => {
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
     const { uploadImage, uploading } = useCloudinaryUpload();
-    const { profile, refetch: refetchProfile } = useArtistProfile();
+    const { refetch: refetchProfile } = useArtistProfile();
 
     const [step, setStep]               = useState<Step>(1);
     const [idType, setIdType]           = useState<IDType>('nin');
     const [ninNumber, setNinNumber]     = useState('');
+    const [docFile, setDocFile] = useState({type: 'image/jpeg', name: 'identity.jpg'});
     const [docUri, setDocUri]           = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errors, setErrors] = useState<{ nin?: string; document?: string; form?: string }>({});
+    const [cameraDenied, setCameraDenied] = useState(false);
+
+    /** Accepts a picked file only if it's small enough to upload. */
+    const accept = (uri: string, type: string, name: string, size?: number | null) => {
+        if (size && size > MAX_DOCUMENT_BYTES) {
+            setErrors({ document: `This file is ${(size / 1024 / 1024).toFixed(1)} MB. Use one under 5 MB, or take a photo instead.` });
+            return;
+        }
+        setErrors({});
+        setDocUri(uri);
+        setDocFile({ type, name });
+    };
 
     // ─── capture logic ───
 
@@ -51,50 +70,49 @@ export const KYCVerification = () => {
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.8,
         });
-        if (!result.canceled) setDocUri(result.assets[0].uri);
+        if (!result.canceled) { const asset = result.assets[0]; accept(asset.uri, asset.mimeType || 'image/jpeg', asset.fileName || 'identity.jpg', asset.fileSize); }
     };
 
     const takePhoto = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission Denied', 'Camera access is required to take a photo.');
+            setCameraDenied(true);
             return;
         }
+        setCameraDenied(false);
         const result = await ImagePicker.launchCameraAsync({
             quality: 0.8,
         });
-        if (!result.canceled) setDocUri(result.assets[0].uri);
+        if (!result.canceled) { const asset = result.assets[0]; accept(asset.uri, asset.mimeType || 'image/jpeg', asset.fileName || 'identity.jpg', asset.fileSize); }
     };
 
     const pickDocument = async () => {
         const result = await DocumentPicker.getDocumentAsync({
             type: ['image/*', 'application/pdf'],
         });
-        if (!result.canceled) setDocUri(result.assets[0].uri);
+        if (!result.canceled) { const asset = result.assets[0]; accept(asset.uri, asset.mimeType || 'image/jpeg', asset.name || 'identity.jpg', asset.size); }
     };
 
     // ─── submission ───
 
     const handleSubmit = async () => {
-        if (idType === 'nin' && ninNumber.length < 11) {
-            Alert.alert('Incomplete', 'Please enter a valid 11-digit NIN.');
-            return;
-        }
-        if (idType !== 'nin' && !docUri) {
-            Alert.alert('Missing ID', 'Please capture or upload your ID document.');
-            return;
-        }
+        const found = {
+            nin: idType === 'nin' ? ninRule(ninNumber) || undefined : undefined,
+            document: idType !== 'nin' && !docUri ? 'Take a photo or upload your ID document' : undefined,
+        };
+        setErrors(found);
+        if (found.nin || found.document) return;
 
         setIsSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Not authenticated');
+            if (!user) throw new Error('Please sign in again.');
 
             // 1. Upload to Cloudinary (optional for NIN)
             let docUrl = null;
             if (docUri) {
                 const res = await uploadImage(
-                    { uri: docUri, type: 'image/jpeg', name: `kyc_${idType}_${user.id}.jpg` },
+                    { uri: docUri, type: docFile.type, name: docFile.name },
                     'kyc-documents'
                 );
                 docUrl = res.url;
@@ -118,7 +136,7 @@ export const KYCVerification = () => {
             setStep(3); // Show success step
         } catch (err: any) {
             console.error('KYC error:', err);
-            Alert.alert('Error', err.message || 'Submission failed');
+            setErrors({ form: friendlyError(err).message });
         } finally {
             setIsSubmitting(false);
         }
@@ -130,7 +148,7 @@ export const KYCVerification = () => {
         <View style={s.stepContainer}>
             <Text style={s.sectionTitle}>Step 1: Select ID Type</Text>
             <Text style={s.sectionSub}>Choose the document you want to use for verification</Text>
-            
+
             <View style={s.optionsGrid}>
                 {ID_TYPES.map((type) => {
                     const Icon = type.icon;
@@ -141,7 +159,7 @@ export const KYCVerification = () => {
                             onPress={() => setIdType(type.id)}
                         >
                             <View style={[s.idIconWrap, idType === type.id && { backgroundColor: colors.primaryGlow }]}>
-                                <Icon size={20} color={idType === type.id ? '#fff' : colors.mutedForeground} />
+                                <Icon size={20} color={idType === type.id ? colors.onPrimary : colors.mutedForeground} />
                             </View>
                             <Text style={[s.idLabel, idType === type.id && { color: colors.foreground }]}>{type.label}</Text>
                         </Pressable>
@@ -151,7 +169,7 @@ export const KYCVerification = () => {
 
             <Pressable style={s.nextBtn} onPress={() => setStep(2)}>
                 <Text style={s.nextBtnText}>Continue</Text>
-                <ChevronRight size={18} color="#fff" />
+                <ChevronRight size={18} color={colors.onPrimary} />
             </Pressable>
         </View>
     );
@@ -160,15 +178,30 @@ export const KYCVerification = () => {
         <View style={s.stepContainer}>
             <Text style={s.sectionTitle}>Step 2: Capture Document</Text>
             <Text style={s.sectionSub}>
-                {idType === 'nin' 
-                    ? 'Optional: Take a photo of your NIN slip (Verification can be done with just the number below)' 
+                {idType === 'nin'
+                    ? 'Optional: Take a photo of your NIN slip (Verification can be done with just the number below)'
                     : 'Take a clear photo of your ID or upload a file'}
             </Text>
 
+            {cameraDenied && !docUri && (
+                <View accessibilityRole="alert" style={s.permissionCard}>
+                    <Text style={s.permissionTitle}>Camera access is off</Text>
+                    <Text style={s.permissionBody}>Allow Murranno to use your camera in Settings, or upload a photo from your gallery instead.</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                        <Pressable accessibilityRole="button" style={s.permissionBtn} onPress={() => Linking.openSettings()}>
+                            <Text style={s.permissionBtnText}>Open Settings</Text>
+                        </Pressable>
+                        <Pressable accessibilityRole="button" style={[s.permissionBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }]} onPress={pickImage}>
+                            <Text style={[s.permissionBtnText, { color: colors.foreground }]}>Use gallery</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+
             {docUri ? (
                 <View style={s.previewCard}>
-                    <Image source={{ uri: docUri }} style={s.previewImg} resizeMode="contain" />
-                    <Pressable style={s.retakeBtn} onPress={() => setDocUri(null)}>
+                    {docFile.type === 'application/pdf' ? <Text style={{color: colors.foreground, padding: 24}}>{docFile.name}</Text> : <Image source={{ uri: docUri }} style={s.previewImg} resizeMode="contain" />}
+                    <Pressable accessibilityRole="button" style={s.retakeBtn} onPress={() => setDocUri(null)}>
                         <Text style={s.retakeBtnText}>Retake Photo</Text>
                     </Pressable>
                 </View>
@@ -195,30 +228,35 @@ export const KYCVerification = () => {
                 </View>
             )}
 
+            {!!errors.document && <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 13 }}>{errors.document}</Text>}
+
             {idType === 'nin' && (
-                <View style={{ marginTop: 24 }}>
-                    <Text style={s.label}>Enter NIN Number</Text>
-                    <TextInput
-                        style={s.input}
-                        placeholder="11-digit NIN"
-                        placeholderTextColor={colors.mutedForeground}
-                        value={ninNumber}
-                        onChangeText={(v) => setNinNumber(v.replace(/\D/g, '').slice(0, 11))}
-                        keyboardType="numeric"
-                    />
-                </View>
+                <FormField
+                    containerStyle={{ marginTop: 24 }}
+                    label="NIN number"
+                    placeholder="11-digit NIN"
+                    value={ninNumber}
+                    onChangeText={(v) => { setNinNumber(v.replace(/\D/g, '').slice(0, 11)); setErrors({}); }}
+                    keyboardType="number-pad"
+                    maxLength={11}
+                    error={errors.nin}
+                    hint="Dial *346# on the phone number linked to your NIN if you don’t have it."
+                />
             )}
+
+            <FormError message={errors.form} />
 
             <View style={s.btnGroup}>
                 <Pressable style={s.backBtn} onPress={() => setStep(1)}>
                     <Text style={s.backBtnText}>Back</Text>
                 </Pressable>
-                <Pressable 
-                    style={[s.primaryBtn, (isSubmitting || uploading || (!docUri && idType !== 'nin')) && { opacity: 0.5 }]} 
+                <Pressable
+                    accessibilityRole="button"
+                    style={[s.primaryBtn, (isSubmitting || uploading) && { opacity: 0.5 }]}
                     onPress={handleSubmit}
-                    disabled={isSubmitting || uploading || (!docUri && idType !== 'nin')}
+                    disabled={isSubmitting || uploading}
                 >
-                    {isSubmitting || uploading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.primaryBtnText}>Submit Verification</Text>}
+                    {isSubmitting || uploading ? <ActivityIndicator color={colors.onPrimary} size="small" /> : <Text style={s.primaryBtnText}>Submit Verification</Text>}
                 </Pressable>
             </View>
         </View>
@@ -231,7 +269,7 @@ export const KYCVerification = () => {
             </View>
             <Text style={s.successTitle}>Verification Submitted</Text>
             <Text style={s.successSub}>
-                We've received your documents. Our team is reviewing them now. This usually takes 12-24 hours.
+                We&apos;ve received your documents. Our team is reviewing them now. This usually takes 12-24 hours.
             </Text>
             <Pressable style={s.finishBtn} onPress={() => router.replace('/app/dashboard' as any)}>
                 <Text style={s.finishBtnText}>Go to Dashboard</Text>
@@ -243,13 +281,13 @@ export const KYCVerification = () => {
         <View style={s.screen}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
             <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-                
+
                 {/* Progress Header */}
                 <View style={s.progressRow}>
                     {[1, 2, 3].map((num) => (
                         <View key={num} style={{ flex: 1, alignItems: 'center' }}>
                             <View style={[s.dot, step >= num && s.dotActive]}>
-                                <Text style={[s.dotText, step >= num && { color: '#fff' }]}>{num}</Text>
+                                <Text style={[s.dotText, step >= num && { color: colors.onPrimary }]}>{num}</Text>
                             </View>
                             <View style={[s.progressLine, step > num && s.progressLineActive]} />
                         </View>
@@ -272,7 +310,12 @@ const makeStyles = (colors: any, isDark: boolean) =>
     StyleSheet.create({
         screen: { flex: 1, backgroundColor: colors.background },
         scroll: { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, paddingTop: 60, gap: 20 },
+        permissionCard: { gap: 10, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.warning, backgroundColor: `${colors.warning}14` },
+        permissionTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+        permissionBody: { fontSize: 13, lineHeight: 19, color: colors.mutedForeground },
+        permissionBtn: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, backgroundColor: colors.primary },
+        permissionBtnText: { fontSize: 13, fontWeight: '700', color: colors.onPrimary },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 60, gap: 20 },
 
         progressRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 40, marginBottom: 10 },
         dot: {
@@ -289,13 +332,13 @@ const makeStyles = (colors: any, isDark: boolean) =>
         progressLineActive: { backgroundColor: colors.primaryGlow },
 
         stepContainer: { gap: 16 },
-        sectionTitle:  { fontSize: 24, fontWeight: '800', color: colors.foreground },
+        sectionTitle:  { fontSize: 24, fontWeight: '600', color: colors.foreground },
         sectionSub:    { fontSize: 14, color: colors.mutedForeground, lineHeight: 22 },
 
         optionsGrid: { gap: 12, marginTop: 10 },
         idOption: {
             flexDirection: 'row', alignItems: 'center', gap: 14,
-            padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border,
+            padding: 16, borderRadius: 10, borderWidth: 1, borderColor: colors.border,
             backgroundColor: colors.card,
         },
         idOptionActive: { borderColor: colors.primaryGlow, backgroundColor: `${colors.primaryGlow}08` },
@@ -310,12 +353,12 @@ const makeStyles = (colors: any, isDark: boolean) =>
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
             backgroundColor: colors.primaryGlow, borderRadius: 14, paddingVertical: 16, marginTop: 10,
         },
-        nextBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+        nextBtnText: { fontSize: 16, fontWeight: '700', color: colors.onPrimary },
 
         // Step 2
         captureGroup: { gap: 20, marginTop: 10 },
         captureBtn: {
-            backgroundColor: colors.card, borderRadius: 20, paddingVertical: 40,
+            backgroundColor: colors.card, borderRadius: 12, paddingVertical: 40,
             alignItems: 'center', justifyContent: 'center', borderWidth: 2,
             borderStyle: 'dashed', borderColor: colors.primaryGlow, gap: 10,
         },
@@ -334,10 +377,10 @@ const makeStyles = (colors: any, isDark: boolean) =>
         },
         subCaptureText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
 
-        previewCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: '#000', height: 240, justifyContent: 'center' },
+        previewCard: { borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', height: 240, justifyContent: 'center' },
         previewImg:  { width: '100%', height: '100%' },
-        retakeBtn:   { position: 'absolute', bottom: 12, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-        retakeBtnText:{ fontSize: 12, color: '#fff', fontWeight: '600' },
+        retakeBtn:   { position: 'absolute', bottom: 12, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
+        retakeBtnText:{ fontSize: 12, color: colors.onPrimary, fontWeight: '600' },
 
         label: { fontSize: 14, fontWeight: '600', color: colors.foreground, marginBottom: 8 },
         input: {
@@ -349,13 +392,13 @@ const makeStyles = (colors: any, isDark: boolean) =>
         backBtn:  { flex: 0.4, paddingVertical: 14, alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: colors.border },
         backBtnText: { fontSize: 15, fontWeight: '600', color: colors.foreground },
         primaryBtn:  { flex: 1, backgroundColor: colors.primaryGlow, borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
-        primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+        primaryBtnText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
 
         // Success
         successContainer: { alignItems: 'center', paddingVertical: 40, gap: 20 },
         successCircle:    { width: 90, height: 90, borderRadius: 45, backgroundColor: `${colors.success}18`, justifyContent: 'center', alignItems: 'center' },
-        successTitle:     { fontSize: 24, fontWeight: '800', color: colors.foreground, textAlign: 'center' },
+        successTitle:     { fontSize: 24, fontWeight: '600', color: colors.foreground, textAlign: 'center' },
         successSub:       { fontSize: 15, color: colors.mutedForeground, textAlign: 'center', lineHeight: 24, paddingHorizontal: 20 },
         finishBtn:        { backgroundColor: colors.primaryGlow, borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14, marginTop: 10 },
-        finishBtnText:    { fontSize: 15, fontWeight: '700', color: '#fff' },
+        finishBtnText:    { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
     });

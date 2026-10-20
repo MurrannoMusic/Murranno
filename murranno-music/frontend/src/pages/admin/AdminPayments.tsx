@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/admin/AdminLayout';
@@ -96,7 +97,7 @@ export default function AdminPayments() {
     },
   });
 
-  const { data: payments, isLoading: paymentsLoading } = useQuery({
+  const { data: payments, isLoading: paymentsLoading, error, refetch } = useQuery({
     queryKey: ['admin-campaign-payments', search, paymentStatusFilter],
     queryFn: async () => {
       let query = supabase
@@ -315,18 +316,8 @@ export default function AdminPayments() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paymentsLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      Loading payments...
-                    </TableCell>
-                  </TableRow>
-                ) : payments?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      No payment transactions found
-                    </TableCell>
-                  </TableRow>
+                {paymentsLoading || error || !payments?.length ? (
+                  <TableStateRow colSpan={7} loading={paymentsLoading} error={error} onRetry={() => refetch()} empty={{ title: 'No campaign payments yet' }} filtered={!!search || paymentStatusFilter !== 'all'} onClear={() => { setSearch(''); setPaymentStatusFilter('all'); }} />
                 ) : (
                   payments?.map((payment) => (
                     <TableRow key={payment.id}>

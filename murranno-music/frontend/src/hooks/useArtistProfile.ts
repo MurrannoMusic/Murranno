@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { API_URL, supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
 export interface ArtistProfile {
@@ -94,13 +94,12 @@ export const useArtistProfile = () => {
       formData.append('folder', 'profile-images');
 
       const { data: { session } } = await supabase.auth.getSession();
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-image-cloudinary`;
+      const url = `${API_URL}/functions/v1/upload-image-cloudinary`;
 
       const res = await fetch(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session?.access_token ?? ''}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY!,
         },
         body: formData,
       });

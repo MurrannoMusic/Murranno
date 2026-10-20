@@ -37,10 +37,11 @@ export const useWalletSecurity = () => {
         }
     };
 
-    const setupPin = async (pin: string) => {
+    /** `currentPin` is required by the API when a PIN already exists. */
+    const setupPin = async (pin: string, currentPin?: string) => {
         try {
             const { data, error } = await supabase.functions.invoke('setup-transaction-pin', {
-                body: { pin }
+                body: { pin, current_pin: currentPin }
             });
 
             if (error) throw error;

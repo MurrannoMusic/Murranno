@@ -1,180 +1,151 @@
-import { Music, Clock, Upload, Play, DollarSign, BarChart3, TrendingUp, Newspaper } from 'lucide-react';
-import { NewsCarousel } from '@/components/modern/NewsCarousel';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Link, useNavigate } from 'react-router-dom';
-import { FloatingActionButton } from '@/components/mobile/FloatingActionButton';
-import { AvatarDropdown } from '@/components/layout/AvatarDropdown';
-import { PageContainer } from '@/components/layout/PageContainer';
+import { Link } from 'react-router-dom';
+import { ChevronRight, Clock, DollarSign, Info, Music2, Play, Plus, ShieldAlert, Upload } from 'lucide-react';
 import { useUserType } from '@/hooks/useUserType';
 import { useStats } from '@/hooks/useStats';
-import { useEffect, useState } from 'react';
-import { useDevice } from '@/hooks/useDevice';
-import { useGeolocation } from '@/hooks/useGeolocation';
-import mmLogo from "@/assets/mm_logo.png";
-import { useCurrency } from '@/contexts/CurrencyContext';
-import { TopTracksCard } from '@/components/modern/TopTracksCard';
+import { useReleases } from '@/hooks/useReleases';
+import { useArtistProfile } from '@/hooks/useArtistProfile';
+import { useStreamAnalytics } from '@/hooks/useStreamAnalytics';
 import { useRecentActivity } from '@/hooks/useRecentActivity';
-import { useTopTracks } from '@/hooks/useTopTracks';
-import { AnalyticsCarousel } from '@/components/analytics/AnalyticsCarousel';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { StreamChart } from '@/components/dashboard/StreamChart';
+import { ReleaseRow } from '@/components/dashboard/ReleaseRow';
+import { cn } from '@/lib/utils';
+import { ChartSkeleton, EmptyState, ErrorState, ListSkeleton, StatSkeleton } from '@/components/states/StateViews';
 
-// Components
-import { QuickActionBar } from '@/components/dashboard/QuickActionBar';
-import { MilestoneTracker } from '@/components/dashboard/MilestoneTracker';
-import { DistributionStatus } from '@/components/dashboard/DistributionStatus';
-import { UpcomingReleaseCountdown } from '@/components/dashboard/UpcomingReleaseCountdown';
-import { GettingStartedChecklist } from '@/components/dashboard/GettingStartedChecklist';
+const KYC_COPY = {
+  unverified: { label: 'Verification required', sub: 'Verify your ID to enable music distribution', tone: 'warning', Icon: ShieldAlert },
+  pending: { label: 'Verification pending', sub: 'We are reviewing your documents', tone: 'primary', Icon: Clock },
+  rejected: { label: 'Verification failed', sub: 'Please re-submit your documents', tone: 'destructive', Icon: ShieldAlert },
+} as const;
+const TONE = {
+  warning: 'text-warning border-warning/30 bg-warning/10',
+  primary: 'text-primary border-primary/30 bg-primary/10',
+  destructive: 'text-destructive border-destructive/30 bg-destructive/10',
+};
+const ACTIVITY_ICON = { upload: Upload, dollar: DollarSign, play: Play };
+
+function KycBanner() {
+  const { profile } = useAuth();
+  if (!profile || profile.kyc_status === 'verified') return null;
+  const c = KYC_COPY[profile.kyc_status] ?? KYC_COPY.unverified;
+  return (
+    <Link to="/app/kyc" className={cn('flex items-center gap-3 rounded-lg border p-3 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', TONE[c.tone])}>
+      <c.Icon className="h-5 w-5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold">{c.label}</p>
+        <p className="text-xs text-muted-foreground truncate">{c.sub}</p>
+      </div>
+      <ChevronRight className="h-4 w-4" />
+    </Link>
+  );
+}
+
+function ActivityFeed() {
+  const { activities, loading } = useRecentActivity();
+  return (
+    <section aria-labelledby="activity-heading">
+      <h2 id="activity-heading" className="text-[21px] font-semibold tracking-tight mb-3">Recent activity</h2>
+      {loading ? (
+        <ListSkeleton rows={3} media={false} />
+      ) : activities.length === 0 ? (
+        <EmptyState icon={Clock} title="No activity yet" body="Releases, earnings and campaign updates will show up here." className="py-6" />
+      ) : (
+        <ul>
+          {activities.map((item) => {
+            const Icon = ACTIVITY_ICON[item.icon] ?? Info;
+            return (
+              <li key={item.id} className="flex items-center gap-3 py-4 border-b border-border">
+                <span className="h-9 w-9 rounded-full bg-secondary grid place-items-center">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold truncate">{item.title}</p>
+                  <p className="text-[11px] text-muted-foreground">{item.time}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 export const Dashboard = () => {
-  const { currentUser, loading } = useUserType();
-  const { getStatsAsItems } = useStats();
-  const { activities } = useRecentActivity();
-  const { tracks } = useTopTracks();
-  const navigate = useNavigate();
-  const { deviceInfo, getInfo } = useDevice();
-  const { getCurrentPosition, checkPermissions } = useGeolocation();
-  const { formatCurrency } = useCurrency();
+  const { currentUser, loading: userLoading } = useUserType();
+  const { stats, loading, error: statsError, refetch: refetchStats } = useStats();
+  const { releases, loading: releasesLoading, error: releasesError, refetch: refetchReleases } = useReleases();
+  const { profile } = useArtistProfile();
+  const { chartData, loading: chartLoading, error, refetch } = useStreamAnalytics(30);
+  const { formatAmount } = useCurrency();
 
-  useEffect(() => {
-    // Analytics logging
-    const logAnalytics = async () => {
-      const info = await getInfo();
-      console.log('Dashboard analytics - Device:', info);
-      const permissions = await checkPermissions();
-      if (permissions.location === 'granted') {
-        const position = await getCurrentPosition();
-        if (position) {
-          console.log('Dashboard analytics - Location:', position.coords);
-        }
-      }
-    };
-    logAnalytics();
-  }, []);
-
-  if (loading || !currentUser) {
-    return (
-      <PageContainer>
-        <div className="mobile-container py-8 text-center text-muted-foreground text-sm">
-          {loading ? 'Loading...' : 'Redirecting…'}
-        </div>
-      </PageContainer>
-    );
+  if (userLoading || !currentUser) {
+    return <div className="px-6 py-8 text-center text-sm text-muted-foreground">{userLoading ? 'Loading…' : 'Redirecting…'}</div>;
   }
 
-  const stats = getStatsAsItems();
-
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const firstName = profile?.stage_name?.split(' ')[0];
+  const metrics = [
+    { label: 'Streams', value: stats.totalStreams.toLocaleString(), sub: 'Across all releases' },
+    { label: 'Earnings', value: formatAmount(stats.totalEarnings), sub: 'Lifetime reported royalties' },
+  ];
 
   return (
-    <div className="smooth-scroll pb-16">
-      {/* Top Bar removed - using UnifiedTopBar via AppLayout / Layout */}
+    <div className="px-6 pb-10 space-y-6">
+      <header className="space-y-1.5">
+        <p className="text-sm text-muted-foreground">{greeting}{firstName ? `, ${firstName}` : ''}</p>
+        <h1 className="text-[32px] font-bold tracking-tight leading-tight">Overview</h1>
+      </header>
 
-      <div className="mobile-container space-y-4 mt-2">
+      <KycBanner />
 
-        {/* Quick Actions */}
-        <QuickActionBar />
-
-        {/* Milestone Tracker */}
-        <MilestoneTracker />
-
-        {/* Upcoming Release Countdown */}
-        <UpcomingReleaseCountdown />
-
-        {/* Compact Stats Grid */}
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Earnings */}
-          <div className="bg-card border border-border rounded-xl p-3 shadow-soft flex flex-col justify-between h-20">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Earnings</span>
-              <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-            </div>
-            <div>
-              <div className="text-base font-bold text-card-foreground">
-                {formatCurrency(stats[1]?.value || "0")}
-              </div>
-              <div className={`text-[9px] font-medium ${stats[1]?.changeType === 'positive' ? 'text-emerald-500' : 'text-muted-foreground'}`}>
-                {stats[1]?.change} this month
-              </div>
-            </div>
+      <p className="text-[13px] text-muted-foreground">Streams · Last 30 days</p>
+      {loading ? <StatSkeleton /> : statsError ? <ErrorState error={statsError} title="Couldn’t load your stats" onRetry={refetchStats} className="py-6" /> : (
+      <dl className="grid grid-cols-2 gap-4">
+        {metrics.map((m, i) => (
+          <div key={m.label} className={cn('space-y-2 min-w-0', i === 1 && 'border-l border-border pl-5')}>
+            <dt className="text-sm text-muted-foreground">{m.label}</dt>
+            <dd className="text-[28px] font-semibold tracking-tight tabular-nums truncate">{m.value}</dd>
+            <dd className="text-[11px] text-muted-foreground">{m.sub}</dd>
           </div>
+        ))}
+      </dl>
+      )}
 
-          {/* Total Streams */}
-          <div className="bg-card border border-border rounded-xl p-3 shadow-soft flex flex-col justify-between h-20">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Streams</span>
-              <TrendingUp className="h-3.5 w-3.5 text-blue-500" />
-            </div>
-            <div>
-              <div className="text-base font-bold text-card-foreground">
-                {stats[0]?.value || "0"}
-              </div>
-              <div className={`text-[9px] font-medium ${stats[0]?.changeType === 'positive' ? 'text-blue-500' : 'text-muted-foreground'}`}>
-                {stats[0]?.change} vs last month
-              </div>
-            </div>
-          </div>
+      {error ? (
+        <button type="button" onClick={refetch} className="text-sm text-destructive hover:underline">{error} Try again.</button>
+      ) : (
+        chartLoading ? <ChartSkeleton /> : <StreamChart data={chartData} />
+      )}
+
+      <Link
+        to="/app/upload"
+        className="flex items-center justify-center gap-2.5 min-h-[52px] rounded-[10px] bg-primary text-primary-foreground text-base font-semibold transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      >
+        <Plus className="h-5 w-5" /> New release
+      </Link>
+
+      <section aria-labelledby="releases-heading">
+        <div className="flex items-center justify-between">
+          <h2 id="releases-heading" className="text-[21px] font-semibold tracking-tight">Your releases</h2>
+          <Link to="/app/releases" className="flex items-center gap-1 min-h-11 text-[13px] font-semibold text-primary hover:underline">
+            View all <ChevronRight className="h-4 w-4" />
+          </Link>
         </div>
+        {releasesLoading ? (
+          <ListSkeleton rows={3} />
+        ) : releasesError ? (
+          <ErrorState error={releasesError} title="Couldn’t load your releases" onRetry={refetchReleases} />
+        ) : releases.length ? (
+          releases.slice(0, 3).map((r) => <ReleaseRow key={r.id} release={r} />)
+        ) : (
+          <EmptyState icon={Music2} title="Your music starts here" body="Create your first release to send your music to Spotify, Apple Music, Boomplay and 150+ stores." action={{ label: 'Create a release', to: '/app/upload' }} />
+        )}
+      </section>
 
-        {/* Distribution Status */}
-        <DistributionStatus />
-
-        {/* Performance Insights */}
-        <div>
-          <h2 className="text-xs font-semibold mb-2 px-1 text-muted-foreground flex items-center gap-2 uppercase tracking-wider">
-            <BarChart3 className="h-3.5 w-3.5" /> Performance
-          </h2>
-          <AnalyticsCarousel />
-        </div>
-
-        {/* Top Performing Tracks */}
-        {tracks.length > 0 && <TopTracksCard tracks={tracks} />}
-
-        {/* News Carousel */}
-        <div>
-          <h2 className="text-xs font-semibold mb-2 px-1 text-muted-foreground flex items-center gap-2 uppercase tracking-wider">
-            <Newspaper className="h-3.5 w-3.5" /> News
-          </h2>
-          <NewsCarousel />
-        </div>
-
-        {/* Recent Activity / Getting Started */}
-        <div>
-          <h2 className="text-xs font-semibold mb-2 px-1 text-muted-foreground flex items-center gap-2 uppercase tracking-wider">
-            <Clock className="h-3.5 w-3.5" /> Activity
-          </h2>
-          <Card className="bg-card border border-border rounded-xl shadow-soft">
-            <CardContent className="space-y-2 p-3">
-              {activities.length === 0 ? (
-                <GettingStartedChecklist />
-              ) : (
-                activities.map((activity) => (
-                  <div key={activity.id} className="flex items-center gap-3 p-3 bg-secondary/10 rounded-lg border border-border/50">
-                    <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
-                      {activity.icon === 'dollar' && <DollarSign className="h-4 w-4 text-primary" />}
-                      {activity.icon === 'upload' && <Upload className="h-4 w-4 text-primary" />}
-                      {activity.icon === 'play' && <Play className="h-4 w-4 text-primary" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-card-foreground truncate">{activity.title}</p>
-                        <span className={`text-xs font-bold ${activity.type === 'success' ? 'text-emerald-500' :
-                          activity.type === 'primary' ? 'text-primary' :
-                            'text-card-foreground'
-                          }`}>
-                          {formatCurrency(activity.value)}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{activity.time}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-        </div>
-
-        <FloatingActionButton />
-      </div>
+      <ActivityFeed />
     </div>
   );
 };

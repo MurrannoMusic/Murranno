@@ -4,6 +4,7 @@ import { Home, BarChart2, Music2, DollarSign, Upload } from 'lucide-react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/integrations/supabase/client';
+import { getAppStatus } from '@/lib/appStatus';
 
 export default function AppLayout() {
     const { colors } = useTheme();
@@ -16,9 +17,10 @@ export default function AppLayout() {
             if (!session) router.replace('/sign-in' as any);
         });
 
-        // Listen for auth changes (e.g. logout from another tab)
+        // Listen for auth changes (e.g. logout from another tab). An expired session is
+        // explained by the NetworkStatus prompt, so leave the user on screen until they act on it.
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (!session) router.replace('/sign-in' as any);
+            if (!session) setTimeout(() => { if (!getAppStatus().sessionExpired) router.replace('/sign-in' as any); }, 0);
         });
         return () => subscription.unsubscribe();
     }, [router]);
@@ -31,15 +33,15 @@ export default function AppLayout() {
                     backgroundColor: colors.tabBar,
                     borderTopColor: colors.tabBarBorder,
                     borderTopWidth: 1,
-                    height: 60 + insets.bottom,
-                    paddingBottom: insets.bottom || 8,
+                    height: 64 + insets.bottom,
+                    paddingBottom: Math.max(insets.bottom, 8),
                     paddingTop: 6,
                 },
                 tabBarActiveTintColor:   colors.tabIconSelected,
                 tabBarInactiveTintColor: colors.tabIconDefault,
                 tabBarLabelStyle: {
-                    fontSize: 10,
-                    fontWeight: '600',
+                    fontSize: 11,
+                    fontWeight: '500',
                 },
             }}
         >
@@ -82,6 +84,7 @@ export default function AppLayout() {
             {/* Hidden screens — accessible via navigation but not shown in tab bar */}
             <Tabs.Screen name="dashboard"  options={{ href: null }} />
             <Tabs.Screen name="releases"   options={{ href: null }} />
+            <Tabs.Screen name="releases/[id]" options={{ href: null }} />
             <Tabs.Screen name="profile"    options={{ href: null }} />
             <Tabs.Screen name="kyc"        options={{ href: null }} />
             <Tabs.Screen name="settings"   options={{ href: null }} />
@@ -93,6 +96,7 @@ export default function AppLayout() {
             <Tabs.Screen name="campaigns"      options={{ href: null }} />
             <Tabs.Screen name="campaigns/[id]" options={{ href: null }} />
             <Tabs.Screen name="subscriptions"  options={{ href: null }} />
-        </Tabs>
+        <Tabs.Screen name="notifications" options={{href:null}} />
+</Tabs>
     );
 }

@@ -13,6 +13,7 @@ export interface Activity {
 export const useRecentActivity = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchActivity();
@@ -20,6 +21,7 @@ export const useRecentActivity = () => {
 
   const fetchActivity = async () => {
     try {
+      setError(null);
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
@@ -51,13 +53,15 @@ export const useRecentActivity = () => {
         })
       );
     } catch (err) {
+      setError(err);
       console.error('useRecentActivity error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  return { activities, loading, refetch: fetchActivity };
+  return {
+    error, activities, loading, refetch: fetchActivity };
 };
 
 function getTimeAgo(dateStr: string): string {

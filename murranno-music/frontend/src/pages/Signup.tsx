@@ -5,12 +5,15 @@ import { useUserType } from '@/hooks/useUserType';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Mail } from 'lucide-react';
-import musicianBg from '@/assets/musician-background.jpg';
+import { Loader2, Mail } from 'lucide-react';
+import { AuthShell } from '@/components/auth/AuthShell';
 import { UserType } from '@/types/user';
 import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
+import { FieldError } from '@/components/forms/FieldError';
+import { PasswordInput } from '@/components/forms/PasswordInput';
+import { email as emailRule, fieldA11y, matches, ngPhone, password as passwordRule, required, validate } from '@/lib/validation';
 import { useToast } from '@/hooks/use-toast';
+import { isNativeApp } from '@/utils/platformDetection';
 
 export const Signup = () => {
   const navigate = useNavigate();
@@ -52,15 +55,27 @@ export const Signup = () => {
     }
   }, [user, navigate, userRole]);
 
+  type Field = 'firstName' | 'lastName' | 'phone' | 'email' | 'password' | 'confirmPassword';
+  const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
+  const clearError = (field: Field) => setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password !== confirmPassword) {
-      toast({
-        title: 'Passwords do not match',
-        description: 'Please make sure both passwords are the same',
-        variant: 'destructive',
-      });
+    const found = validate(
+      { firstName, lastName, phone, email, password, confirmPassword },
+      {
+        firstName: [required('your first name')],
+        lastName: [required('your last name')],
+        phone: [required('your phone number'), ngPhone],
+        email: [emailRule],
+        password: [passwordRule],
+        confirmPassword: [required('your password again'), matches(password)],
+      },
+    );
+    setErrors(found);
+    if (Object.keys(found).length) {
+      document.getElementById(Object.keys(found)[0])?.focus();
       return;
     }
 
@@ -103,56 +118,28 @@ export const Signup = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Background Image */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: `url(${musicianBg})`,
-          backgroundSize: 'cover',
-          backgroundPosition: '65% center',
-          backgroundRepeat: 'no-repeat'
-        }}
-      />
-
-      {/* Content positioned with card at bottom */}
-      <div className="relative z-10 min-h-screen flex flex-col justify-end pt-8 pb-8">
-        <div className="mobile-container">
-          <Link to="/welcome" className="mb-4 inline-block">
-            <ArrowLeft className="h-6 w-6 text-white drop-shadow-lg" />
-          </Link>
-        </div>
-
-        <div className="mobile-container">
-
-          <Card className="backdrop-blur-xl bg-black/30 border-white/20 shadow-2xl">
-            <CardHeader className="bg-white/5 border-b border-white/10">
-              <CardTitle className="text-center text-2xl text-white drop-shadow-lg">
-                {showVerificationMessage ? 'Verify Your Email' : 'Join Murranno Music'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+    <AuthShell back={isNativeApp() ? '/welcome' : '/landing'} variant="signup" title={showVerificationMessage ? 'Verify your email' : 'Join Murranno Music'}>
               {showVerificationMessage ? (
                 <div className="text-center space-y-4 py-6">
                   <div className="w-16 h-16 mx-auto bg-primary/20 rounded-full flex items-center justify-center">
                     <Mail className="w-8 h-8 text-primary" />
                   </div>
-                  <p className="text-white/90 drop-shadow-md">
+                  <p>
                     We've sent a verification link to <strong>{email}</strong>
                   </p>
-                  <p className="text-white/70 text-sm drop-shadow-md">
+                  <p className="text-sm text-muted-foreground">
                     Please check your inbox and click the link to verify your account.
                   </p>
                   <Button
                     onClick={() => navigate('/verify-email')}
-                    className="w-full gradient-primary music-button shadow-primary"
+                    className="w-full min-h-[52px] rounded-[10px] text-base font-semibold"
                   >
                     Go to Verification Page
                   </Button>
                   <Button
                     onClick={() => setShowVerificationMessage(false)}
                     variant="ghost"
-                    className="w-full text-white/70 hover:text-white hover:bg-white/10"
+                    className="w-full"
                   >
                     Back to Signup
                   </Button>
@@ -161,89 +148,93 @@ export const Signup = () => {
                 <>
                   <SocialLoginButtons />
 
-                  <form onSubmit={handleSignup} className="space-y-6 mt-6">
+                  <form onSubmit={handleSignup} noValidate className="space-y-6 mt-6">
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor="firstName" className="text-white/90 drop-shadow-md">First Name</Label>
+                          <Label htmlFor="firstName">First Name</Label>
                           <Input
                             id="firstName"
                             type="text"
                             value={firstName}
-                            onChange={(e) => setFirstName(e.target.value)}
+                            onChange={(e) => { setFirstName(e.target.value); clearError('firstName'); }}
                             placeholder="John"
-                            className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-white/40"
-                            required
+                            autoComplete="given-name"
+                            {...fieldA11y('firstName', errors.firstName)}
                           />
+                          <FieldError id="firstName" error={errors.firstName} />
                         </div>
                         <div>
-                          <Label htmlFor="lastName" className="text-white/90 drop-shadow-md">Last Name</Label>
+                          <Label htmlFor="lastName">Last Name</Label>
                           <Input
                             id="lastName"
                             type="text"
                             value={lastName}
-                            onChange={(e) => setLastName(e.target.value)}
+                            onChange={(e) => { setLastName(e.target.value); clearError('lastName'); }}
                             placeholder="Doe"
-                            className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-white/40"
-                            required
+                            autoComplete="family-name"
+                            {...fieldA11y('lastName', errors.lastName)}
                           />
+                          <FieldError id="lastName" error={errors.lastName} />
                         </div>
                       </div>
 
                       <div>
-                        <Label htmlFor="phone" className="text-white/90 drop-shadow-md">Phone Number</Label>
+                        <Label htmlFor="phone">Phone Number</Label>
                         <Input
                           id="phone"
                           type="tel"
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
+                          onChange={(e) => { setPhone(e.target.value); clearError('phone'); }}
                           placeholder="+234..."
-                          className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-white/40"
-                          required
+                          autoComplete="tel"
+                          {...fieldA11y('phone', errors.phone)}
                         />
+                        <FieldError id="phone" error={errors.phone} />
                       </div>
 
                       <div>
-                        <Label htmlFor="email" className="text-white/90 drop-shadow-md">Email</Label>
+                        <Label htmlFor="email">Email</Label>
                         <Input
                           id="email"
                           type="email"
                           value={email}
-                          onChange={(e) => setEmail(e.target.value)}
+                          onChange={(e) => { setEmail(e.target.value); clearError('email'); }}
                           placeholder="Enter your email"
-                          className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-white/40"
-                          required
+                          autoComplete="email"
+                          {...fieldA11y('email', errors.email)}
                         />
+                        <FieldError id="email" error={errors.email} />
                       </div>
 
                       <div>
-                        <Label htmlFor="password" className="text-white/90 drop-shadow-md">Password</Label>
-                        <Input
+                        <Label htmlFor="password">Password</Label>
+                        <PasswordInput
                           id="password"
-                          type="password"
                           value={password}
-                          onChange={(e) => setPassword(e.target.value)}
+                          onChange={(e) => { setPassword(e.target.value); clearError('password'); }}
                           placeholder="Create a password"
-                          className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-white/40"
-                          required
+                          autoComplete="new-password"
+                          {...fieldA11y('password', errors.password)}
                         />
+                        <FieldError id="password" error={errors.password} />
                       </div>
 
                       <div>
-                        <Label htmlFor="confirmPassword" className="text-white/90 drop-shadow-md">Confirm Password</Label>
-                        <Input
+                        <Label htmlFor="confirmPassword">Confirm Password</Label>
+                        <PasswordInput
                           id="confirmPassword"
-                          type="password"
                           value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          onChange={(e) => { setConfirmPassword(e.target.value); clearError('confirmPassword'); }}
                           placeholder="Confirm your password"
-                          className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-white/40"
-                          required
+                          autoComplete="new-password"
+                          {...fieldA11y('confirmPassword', errors.confirmPassword)}
                         />
+                        <FieldError id="confirmPassword" error={errors.confirmPassword} />
                       </div>
                     </div>
 
-                    <Button type="submit" className="w-full gradient-primary music-button shadow-primary" size="lg" disabled={loading}>
+                    <Button type="submit" className="w-full min-h-[52px] rounded-[10px] text-base font-semibold" size="lg" disabled={loading}>
                       {loading ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -256,19 +247,15 @@ export const Signup = () => {
                   </form>
 
                   <div className="mt-6 text-center">
-                    <p className="text-white/90 drop-shadow-md">
+                    <p>
                       Already have an account?{' '}
-                      <Link to="/login" className="text-primary font-medium hover:underline drop-shadow-lg">
+                      <Link to="/login" className="text-primary font-semibold hover:underline">
                         Log in
                       </Link>
                     </p>
                   </div>
                 </>
               )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 };

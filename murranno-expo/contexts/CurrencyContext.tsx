@@ -30,7 +30,7 @@ export const CurrencyProvider = ({ children }: { children: React.ReactNode }) =>
             if (val === 'USD' || val === 'NGN') setCurrencyState(val);
         });
 
-        supabase.functions.invoke('get-platform-settings').then(({ data }) => {
+        supabase.functions.invoke('get-mobile-config').then(({ data }) => {
             const rate = data?.settings?.usd_to_ngn_rate;
             if (rate && Number(rate) > 0) setUsdToNgnRate(Number(rate));
         });

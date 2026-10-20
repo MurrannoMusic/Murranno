@@ -1,11 +1,5 @@
-import { AdvancedImage, lazyload, responsive, placeholder } from '@cloudinary/react';
-import { cld } from '@/lib/cloudinary';
-import { fill } from '@cloudinary/url-gen/actions/resize';
-import { autoGravity } from '@cloudinary/url-gen/qualifiers/gravity';
-import { format, quality } from '@cloudinary/url-gen/actions/delivery';
-import { auto } from '@cloudinary/url-gen/qualifiers/format';
-import { auto as autoQuality } from '@cloudinary/url-gen/qualifiers/quality';
-
+// Media now lives in R2 (served by the API at /media/<key>); `publicId` is the file's URL.
+// The name and props are kept so existing callers don't change.
 interface CloudinaryImageProps {
   publicId: string;
   alt: string;
@@ -16,32 +10,15 @@ interface CloudinaryImageProps {
   className?: string;
 }
 
-export const CloudinaryImage = ({
-  publicId,
-  alt,
-  width = 800,
-  height = 800,
-  crop = 'fill',
-  gravity = 'auto',
-  className,
-}: CloudinaryImageProps) => {
-  const img = cld.image(publicId);
-
-  // Apply transformations
-  if (crop === 'fill') {
-    img.resize(fill().width(width).height(height).gravity(gravity === 'auto' ? autoGravity() : gravity));
-  }
-
-  img
-    .delivery(format(auto()))
-    .delivery(quality(autoQuality()));
-
-  return (
-    <AdvancedImage
-      cldImg={img}
-      alt={alt}
-      className={className}
-      plugins={[lazyload(), responsive(), placeholder()]}
-    />
-  );
-};
+export const CloudinaryImage = ({ publicId, alt, width = 800, height = 800, crop = 'fill', className }: CloudinaryImageProps) => (
+  <img
+    src={publicId}
+    alt={alt}
+    width={width}
+    height={height}
+    loading="lazy"
+    decoding="async"
+    className={className}
+    style={{ objectFit: crop === 'fit' ? 'contain' : 'cover', aspectRatio: `${width} / ${height}` }}
+  />
+);

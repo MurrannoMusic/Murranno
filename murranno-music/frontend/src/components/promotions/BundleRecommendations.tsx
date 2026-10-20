@@ -3,7 +3,7 @@ import { PromotionService, PromotionBundle } from '@/types/promotion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, TrendingDown, CheckCircle2 } from 'lucide-react';
+import { Tags, TrendingDown, CheckCircle2 } from 'lucide-react';
 import { formatCurrency } from '@/utils/formatters';
 
 interface BundleRecommendation {
@@ -74,7 +74,7 @@ export const BundleRecommendations = ({
   return (
     <div className="space-y-3 pb-4">
       <div className="flex items-center gap-2 px-1">
-        <Sparkles className="h-4 w-4 text-primary" />
+        <Tags className="h-4 w-4 text-primary" />
         <h3 className="font-semibold text-sm">Save Money with Bundles</h3>
       </div>
       

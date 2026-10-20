@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
 export interface ActivityItem {
   id: string;
@@ -15,6 +14,7 @@ export interface ActivityItem {
 export const useRecentActivity = () => {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchRecentActivity();
@@ -22,6 +22,7 @@ export const useRecentActivity = () => {
 
   const fetchRecentActivity = async () => {
     try {
+      setError(null);
       setLoading(true);
       
       // Get user's artist profile
@@ -95,6 +96,7 @@ export const useRecentActivity = () => {
 
       setActivities(allActivities.slice(0, 3));
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching recent activity:', error);
       // Don't show error toast, just use empty state
     } finally {
@@ -103,6 +105,7 @@ export const useRecentActivity = () => {
   };
 
   return {
+    error,
     activities,
     loading,
     refetch: fetchRecentActivity,

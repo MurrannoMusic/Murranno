@@ -105,12 +105,12 @@ export const FAQ = () => {
                 {/* CTA */}
                 <View style={s.ctaCard}>
                     <Text style={s.ctaTitle}>Still have questions?</Text>
-                    <Text style={s.ctaSub}>Can't find what you're looking for? Our support team is here to help.</Text>
+                    <Text style={s.ctaSub}>Can&apos;t find what you&apos;re looking for? Our support team is here to help.</Text>
                     <Pressable
                         style={s.ctaBtn}
                         onPress={() => router.push('/app/support' as any)}
                     >
-                        <MessageCircle size={15} color="#fff" />
+                        <MessageCircle size={15} color={colors.onPrimary} />
                         <Text style={s.ctaBtnText}>Contact Support</Text>
                     </Pressable>
                 </View>
@@ -127,16 +127,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     return StyleSheet.create({
         screen:       { flex: 1, backgroundColor: colors.background },
         scroll:       { flex: 1 },
-        scrollContent:{ paddingHorizontal: 16, paddingTop: 8, gap: 16 },
+        scrollContent:{ width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 8, gap: 16 },
 
         back: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10 },
         backText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
 
-        title:    { fontSize: 24, fontWeight: '800', color: colors.foreground },
+        title:    { fontSize: 24, fontWeight: '600', color: colors.foreground },
         subtitle: { fontSize: 14, color: colors.mutedForeground, lineHeight: 22, marginTop: -8 },
 
         accordionWrap: {
-            backgroundColor: colors.card, borderRadius: 16,
+            backgroundColor: colors.card, borderRadius: 10,
             borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
         },
         item:       { paddingHorizontal: 16 },
@@ -149,7 +149,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         answer:   { fontSize: 13, color: colors.mutedForeground, lineHeight: 20, paddingBottom: 14 },
 
         ctaCard: {
-            backgroundColor: colors.card, borderRadius: 16,
+            backgroundColor: colors.card, borderRadius: 10,
             borderWidth: 1, borderColor: colors.border,
             padding: 20, alignItems: 'center', gap: 8,
         },
@@ -160,6 +160,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             backgroundColor: colors.primaryGlow, borderRadius: 12,
             paddingVertical: 12, paddingHorizontal: 24, marginTop: 4,
         },
-        ctaBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+        ctaBtnText: { fontSize: 14, fontWeight: '700', color: colors.onPrimary },
     });
 }

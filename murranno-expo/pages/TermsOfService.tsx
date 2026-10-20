@@ -49,7 +49,7 @@ const SECTIONS = [
     },
     {
         title: '11. Contact Information',
-        body: 'For questions about these Terms of Service, please contact us at legal@murrannomusic.com.',
+        body: 'For questions about these Terms of Service, please contact us at legal@murrannomusic.co.',
     },
 ];
 
@@ -90,12 +90,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     return StyleSheet.create({
         screen:       { flex: 1, backgroundColor: colors.background },
         scroll:       { flex: 1 },
-        scrollContent:{ paddingHorizontal: 16, paddingTop: 8, gap: 4 },
+        scrollContent:{ width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 8, gap: 4 },
 
         back: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, marginBottom: 4 },
         backText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
 
-        title: { fontSize: 26, fontWeight: '800', color: colors.foreground, marginBottom: 4 },
+        title: { fontSize: 26, fontWeight: '600', color: colors.foreground, marginBottom: 4 },
         meta:  { fontSize: 12, color: colors.mutedForeground, marginBottom: 16 },
 
         section:      { marginBottom: 20 },

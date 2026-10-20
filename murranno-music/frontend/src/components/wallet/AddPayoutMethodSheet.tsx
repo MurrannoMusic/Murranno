@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { FieldError } from '@/components/forms/FieldError';
+import { ErrorState, SuccessState, friendlyError } from '@/components/states/StateViews';
+import { accountNumber as accountNumberRule, fieldA11y } from '@/lib/validation';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -28,6 +31,9 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verified, setVerified] = useState(false);
+  const [errors, setErrors] = useState<{ bank?: string; account?: string; form?: string }>({});
+  const [banksError, setBanksError] = useState<unknown>(null);
+  const [added, setAdded] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -38,6 +44,7 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
 
   const fetchBanks = async () => {
     try {
+      setBanksError(null);
       const { data, error } = await supabase.functions.invoke('paystack-get-banks');
 
       if (error) throw error;
@@ -47,23 +54,14 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
       }
     } catch (error: any) {
       console.error('Error fetching banks:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load banks',
-        variant: 'destructive',
-      });
+      setBanksError(error);
     }
   };
 
   const verifyAccount = async () => {
-    if (!selectedBank || !accountNumber || accountNumber.length !== 10) {
-      toast({
-        title: 'Invalid Input',
-        description: 'Please select a bank and enter a valid 10-digit account number',
-        variant: 'destructive',
-      });
-      return;
-    }
+    const found = { bank: selectedBank ? undefined : 'Choose your bank', account: accountNumberRule(accountNumber) || undefined };
+    setErrors(found);
+    if (found.bank || found.account) return;
 
     try {
       setVerifying(true);
@@ -82,20 +80,12 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
       if (data.success) {
         setAccountName(data.data.account_name);
         setVerified(true);
-        toast({
-          title: 'Account Verified',
-          description: `Account holder: ${data.data.account_name}`,
-        });
       } else {
         throw new Error(data.error || 'Failed to verify account');
       }
     } catch (error: any) {
       console.error('Error verifying account:', error);
-      toast({
-        title: 'Verification Failed',
-        description: error.message || 'Could not verify account details',
-        variant: 'destructive',
-      });
+      setErrors({ account: friendlyError(error).kind === 'offline' ? friendlyError(error).message : 'We couldn’t find this account at the selected bank. Check the number and bank.' });
     } finally {
       setVerifying(false);
     }
@@ -103,11 +93,7 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
 
   const handleSubmit = async () => {
     if (!verified || !accountName) {
-      toast({
-        title: 'Error',
-        description: 'Please verify your account first',
-        variant: 'destructive',
-      });
+      void verifyAccount();
       return;
     }
 
@@ -128,25 +114,14 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
       if (error) throw error;
 
       if (data.success) {
-        // Set security lock for 24 hours after bank details change
-        const lockUntil = new Date();
-        lockUntil.setHours(lockUntil.getHours() + 24);
-
-        await supabase.from('profiles').update({
-          payout_lock_until: lockUntil.toISOString()
-        }).eq('id', (await supabase.auth.getUser()).data.user?.id);
-
-        toast({
-          title: 'Success',
-          description: 'Bank account added successfully. A 24-hour security lock is now active.',
-        });
+        // The 24-hour payout lock is applied by the server when the recipient is created.
 
         // Log Security Activity
         try {
           await supabase.from('security_logs').insert({
             user_id: (await supabase.auth.getUser()).data.user?.id,
             event: 'bank_account_added',
-            details: { bank_name: selectedBankName, account_number: accountNumber },
+            details: { bank_name: bank?.name ?? '', account_number: accountNumber },
             ip_address: 'browser', // IP will be captured by Supabase Auth if using RLS/Functions, but for simple logging:
             user_agent: navigator.userAgent
           });
@@ -155,17 +130,13 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
         }
 
         onSuccess();
-        handleClose();
+        setAdded(true);
       } else {
         throw new Error(data.error || 'Failed to add payout method');
       }
     } catch (error: any) {
       console.error('Error adding payout method:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to add bank account',
-        variant: 'destructive',
-      });
+      setErrors({ form: friendlyError(error).message });
     } finally {
       setLoading(false);
     }
@@ -176,6 +147,8 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
     setAccountNumber('');
     setAccountName('');
     setVerified(false);
+    setErrors({});
+    setAdded(false);
     onClose();
   };
 
@@ -195,11 +168,20 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
           <SheetTitle>Add Bank Account</SheetTitle>
         </SheetHeader>
 
+        {added ? (
+          <SuccessState
+            className="mt-4"
+            title="Bank account added"
+            body={<><strong>{accountName}</strong> · {accountNumber}<br />For your security, withdrawals are paused for 24 hours after adding bank details.</>}
+            action={{ label: 'Done', onClick: handleClose }}
+          />
+        ) : (
         <div className="space-y-4 mt-6">
           <div className="space-y-2">
             <Label htmlFor="bank">Bank</Label>
-            <Select value={selectedBank} onValueChange={setSelectedBank}>
-              <SelectTrigger>
+            {banksError ? <ErrorState error={banksError} title="Couldn’t load the list of banks" onRetry={fetchBanks} className="py-4" /> : (
+            <Select value={selectedBank} onValueChange={(v) => { setSelectedBank(v); setErrors({}); }}>
+              <SelectTrigger id="bank" {...fieldA11y('bank', errors.bank)}>
                 <SelectValue placeholder="Select your bank" />
               </SelectTrigger>
               <SelectContent>
@@ -210,6 +192,8 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
                 ))}
               </SelectContent>
             </Select>
+            )}
+            <FieldError id="bank" error={errors.bank} />
           </div>
 
           <div className="space-y-2">
@@ -220,8 +204,10 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
                 type="text"
                 maxLength={10}
                 value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
+                inputMode="numeric"
+                onChange={(e) => { setAccountNumber(e.target.value.replace(/\D/g, '')); setErrors({}); }}
                 placeholder="Enter 10-digit account number"
+                {...fieldA11y('accountNumber', errors.account)}
               />
               {verifying && (
                 <Loader2 className="h-4 w-4 animate-spin absolute right-3 top-3 text-muted-foreground" />
@@ -230,6 +216,7 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
                 <CheckCircle className="h-4 w-4 absolute right-3 top-3 text-success" />
               )}
             </div>
+            <FieldError id="accountNumber" error={errors.account} />
           </div>
 
           {accountName && (
@@ -241,9 +228,11 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
             </div>
           )}
 
+          {errors.form && <p role="alert" className="text-sm text-destructive">{errors.form}</p>}
+
           <Button
             onClick={handleSubmit}
-            disabled={!verified || loading}
+            disabled={loading || verifying}
             className="w-full"
           >
             {loading ? (
@@ -256,6 +245,7 @@ export const AddPayoutMethodSheet = ({ open, onClose, onSuccess }: AddPayoutMeth
             )}
           </Button>
         </div>
+        )}
       </SheetContent>
     </Sheet>
   );

@@ -1,0 +1,15 @@
+{
+  // Web app on Cloudflare (Pages, now served as a static-assets Worker). Deploy: npm run build && npx wrangler deploy
+  "$schema": "../../murranno-worker/node_modules/wrangler/config-schema.json",
+  "name": "murranno",
+  "account_id": "d93620af8472697b06599191faa2c954",
+  "compatibility_date": "2026-09-01",
+  // Old *.workers.dev URL kept live until every client uses the custom domain
+  "workers_dev": true,
+  "routes": [{ "pattern": "app.murrannomusic.co", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist",
+    // React Router: unknown paths serve index.html
+    "not_found_handling": "single-page-application"
+  }
+}

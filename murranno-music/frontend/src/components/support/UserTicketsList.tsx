@@ -4,10 +4,11 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
+import { EmptyState, ErrorState } from '@/components/states/StateViews';
 import { MessageSquare, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const UserTicketsList = () => {
-    const { data: tickets, isLoading } = useQuery({
+    const { data: tickets, isLoading, error, refetch } = useQuery({
         queryKey: ['user-tickets'],
         queryFn: async () => {
             const { data, error } = await supabase
@@ -67,16 +68,10 @@ export const UserTicketsList = () => {
         );
     }
 
+    if (error) return <ErrorState error={error} title="Couldn’t load your tickets" onRetry={() => refetch()} />;
+
     if (!tickets || tickets.length === 0) {
-        return (
-            <div className="text-center py-12 bg-secondary/10 rounded-xl border border-dashed border-border">
-                <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
-                <h3 className="text-lg font-medium mb-1">No tickets found</h3>
-                <p className="text-sm text-muted-foreground">
-                    You haven't submitted any support requests yet.
-                </p>
-            </div>
-        );
+        return <EmptyState icon={MessageSquare} title="No tickets yet" body="When you send us a request it shows up here with its status and our replies." />;
     }
 
     return (

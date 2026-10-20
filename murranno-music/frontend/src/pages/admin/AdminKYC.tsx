@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/admin/AdminLayout';
@@ -10,11 +11,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from 'sonner';
 import { CheckCircle, XCircle, FileText, Eye } from 'lucide-react';
 
+// Identity documents are private: fetch a short-lived signed link. The tab opens first so it isn't popup-blocked.
+async function openDocument(url: string) {
+    if (!url.includes('/media/private/')) {
+        window.open(url, '_blank', 'noopener');
+        return;
+    }
+    const tab = window.open('', '_blank');
+    const { data, error } = await supabase.functions.invoke('media-signed-url', { body: { url } });
+    if (error || !data?.url) {
+        tab?.close();
+        toast.error('Could not open the document');
+        return;
+    }
+    if (tab) {
+        tab.opener = null;
+        tab.location.href = data.url;
+    }
+}
+
 export default function AdminKYC() {
     const queryClient = useQueryClient();
     const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
 
-    const { data: profiles, isLoading } = useQuery({
+    const { data: profiles, isLoading, error, refetch } = useQuery({
         queryKey: ['admin-kyc-pending'],
         queryFn: async () => {
             const { data, error } = await supabase
@@ -68,11 +88,9 @@ export default function AdminKYC() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {isLoading ? (
-                                    <TableRow><TableCell colSpan={4}>Loading...</TableCell></TableRow>
-                                ) : profiles?.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4}>No pending requests</TableCell></TableRow>
-                                ) : (
+                                {isLoading || error || !profiles?.length ? (
+                  <TableStateRow colSpan={4} loading={isLoading} error={error} onRetry={() => refetch()} empty={{ title: 'No pending verifications', body: 'You’re all caught up. New ID submissions will appear here.' }} />
+                ) : (
                                     profiles?.map((profile) => (
                                         <TableRow key={profile.id}>
                                             <TableCell>
@@ -84,7 +102,7 @@ export default function AdminKYC() {
                                             <TableCell>{profile.nin_number}</TableCell>
                                             <TableCell>
                                                 {profile.id_document_url ? (
-                                                    <Button variant="outline" size="sm" onClick={() => window.open(profile.id_document_url, '_blank')}>
+                                                    <Button variant="outline" size="sm" onClick={() => openDocument(profile.id_document_url)}>
                                                         <Eye className="h-4 w-4 mr-2" /> View Doc
                                                     </Button>
                                                 ) : <span className="text-muted-foreground">No file</span>}

@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Release, ReleaseStatus } from '@/types/release';
-import { toast } from 'sonner';
 
 export const useReleases = () => {
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReleaseStatus | 'All'>('All');
 
@@ -15,6 +15,7 @@ export const useReleases = () => {
 
   const fetchReleases = async () => {
     try {
+      setError(null);
       setLoading(true);
       const { data, error } = await supabase.functions.invoke('get-user-releases');
 
@@ -26,8 +27,8 @@ export const useReleases = () => {
 
       setReleases(data.releases || []);
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching releases:', error);
-      toast.error('Failed to load releases');
     } finally {
       setLoading(false);
     }
@@ -51,6 +52,7 @@ export const useReleases = () => {
   };
 
   return {
+    error,
     releases: filteredReleases,
     allReleases: releases,
     searchQuery,

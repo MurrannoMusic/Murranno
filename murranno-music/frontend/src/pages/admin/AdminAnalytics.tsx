@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ErrorState } from '@/components/states/StateViews';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/admin/AdminLayout';
@@ -36,7 +38,7 @@ const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accen
 export default function AdminAnalytics() {
   const [timePeriod, setTimePeriod] = useState('30d');
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-analytics-stats', timePeriod],
     queryFn: async () => {
       const daysAgo = timePeriod === '7d' ? 7 : timePeriod === '30d' ? 30 : 90;
@@ -192,6 +194,8 @@ export default function AdminAnalytics() {
           </Select>
         </div>
 
+        {error && <Card><ErrorState error={error} title="Couldn’t load analytics" onRetry={() => refetch()} /></Card>}
+
         {/* Key Metrics */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card className="modern-card">
@@ -202,7 +206,7 @@ export default function AdminAnalytics() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Users</p>
-                  <p className="text-2xl font-bold">{isLoading ? '...' : stats?.totalUsers || 0}</p>
+                  <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-20" /> : stats?.totalUsers || 0}</div>
                   <p className="text-xs text-success">+{stats?.newUsers || 0} new</p>
                 </div>
               </div>
@@ -217,7 +221,7 @@ export default function AdminAnalytics() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Releases</p>
-                  <p className="text-2xl font-bold">{isLoading ? '...' : stats?.totalReleases || 0}</p>
+                  <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-20" /> : stats?.totalReleases || 0}</div>
                 </div>
               </div>
             </CardContent>
@@ -231,9 +235,9 @@ export default function AdminAnalytics() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-bold">
-                    {isLoading ? '...' : formatCurrency(stats?.totalRevenue || 0)}
-                  </p>
+                  <div className="text-2xl font-bold">
+                    {isLoading ? <Skeleton className="h-8 w-20" /> : formatCurrency(stats?.totalRevenue || 0)}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -247,7 +251,7 @@ export default function AdminAnalytics() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Active Campaigns</p>
-                  <p className="text-2xl font-bold">{isLoading ? '...' : stats?.activeCampaigns || 0}</p>
+                  <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-20" /> : stats?.activeCampaigns || 0}</div>
                 </div>
               </div>
             </CardContent>

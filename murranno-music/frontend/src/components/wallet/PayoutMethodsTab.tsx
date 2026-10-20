@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Plus, Settings, Trash2, Star } from 'lucide-react';
+import { Landmark, Plus, Settings, Trash2, Star } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CardSkeleton, EmptyState, ErrorState } from '@/components/states/StateViews';
 import { AddPayoutMethodSheet } from './AddPayoutMethodSheet';
 import { usePayoutMethods } from '@/hooks/usePayoutMethods';
-import { Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 export const PayoutMethodsTab = () => {
-  const { payoutMethods, loading, deleteMethod, setPrimary, refetch } = usePayoutMethods();
+  const { payoutMethods, loading, error, deleteMethod, setPrimary, refetch } = usePayoutMethods();
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -29,13 +29,8 @@ export const PayoutMethodsTab = () => {
     bank: 'bg-primary/20 text-primary',
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  if (loading) return <div className="space-y-3"><CardSkeleton lines={2} /><CardSkeleton lines={2} /></div>;
+  if (error) return <ErrorState error={error} title="Couldn’t load your payout methods" onRetry={refetch} />;
 
   return (
     <>
@@ -57,13 +52,7 @@ export const PayoutMethodsTab = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             {payoutMethods.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="mb-2">No payout methods added yet</p>
-                <Button onClick={() => setShowAddSheet(true)} variant="outline" size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add your first bank account
-                </Button>
-              </div>
+              <EmptyState icon={Landmark} title="No bank account yet" body="Add the Nigerian bank account your earnings should be paid into. We check the account name with your bank." action={{ label: 'Add a bank account', onClick: () => setShowAddSheet(true) }} />
             ) : (
               payoutMethods.map((method) => (
                 <div

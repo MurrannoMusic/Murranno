@@ -13,25 +13,9 @@ export const ServiceDeliveryStatus = ({ campaignId }: ServiceDeliveryProps) => {
 
   React.useEffect(() => {
     fetchServices();
-    
-    // Subscribe to realtime updates
-    const channel = supabase
-      .channel(`campaign-services-${campaignId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'campaign_services',
-          filter: `campaign_id=eq.${campaignId}`
-        },
-        () => fetchServices()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // The API has no realtime channels: poll for delivery updates instead.
+    const timer = setInterval(fetchServices, 30_000);
+    return () => clearInterval(timer);
   }, [campaignId]);
 
   const fetchServices = async () => {

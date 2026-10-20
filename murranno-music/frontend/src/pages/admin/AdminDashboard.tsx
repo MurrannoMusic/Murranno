@@ -1,11 +1,12 @@
 import { AdminLayout } from '@/components/admin/AdminLayout';
+import { ErrorState } from '@/components/states/StateViews';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, FileText, DollarSign, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAdminStats } from '@/hooks/admin/useAdminStats';
 
 export default function AdminDashboard() {
-  const { analytics, isLoading } = useAdminStats();
+  const { analytics, isLoading, error, refetch } = useAdminStats();
 
   const stats = [
     {
@@ -44,6 +45,7 @@ export default function AdminDashboard() {
           </p>
         </div>
 
+        {error ? <Card><ErrorState error={error} title="Couldn’t load platform stats" onRetry={() => refetch()} /></Card> : <>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
             <Card key={stat.title}>
@@ -125,6 +127,7 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+        </>}
       </div>
     </AdminLayout>
   );

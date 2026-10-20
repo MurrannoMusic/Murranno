@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet, Animated } from 'react-native';
+import { View, Image, StyleSheet, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Splash() {
     const router  = useRouter();
+    const { colors } = useTheme();
     const opacity = useRef(new Animated.Value(0)).current;
     const scale   = useRef(new Animated.Value(0.88)).current;
     const taglineOpacity = useRef(new Animated.Value(0)).current;
@@ -28,7 +30,7 @@ export default function Splash() {
     }, [opacity, scale, taglineOpacity, router]);
 
     return (
-        <View style={s.screen}>
+        <View style={[s.screen, { backgroundColor: colors.background }]}>
             <Animated.View style={[s.logoWrap, { opacity, transform: [{ scale }] }]}>
                 <Image
                     source={require('../assets/images/logo.png')}
@@ -36,7 +38,7 @@ export default function Splash() {
                     resizeMode="contain"
                 />
             </Animated.View>
-            <Animated.Text style={[s.tagline, { opacity: taglineOpacity }]}>
+            <Animated.Text style={[s.tagline, { opacity: taglineOpacity, color: colors.mutedForeground }]}>
                 Distribute. Promote. Earn.
             </Animated.Text>
         </View>

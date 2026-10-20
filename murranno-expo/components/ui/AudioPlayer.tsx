@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { Audio } from 'expo-av';
 import { Play, Pause, Square } from 'lucide-react-native';
+import { notify } from '@/lib/api';
 import { useTheme } from '@/hooks/useTheme';
 
 const formatDuration = (seconds: number) => {
@@ -18,6 +19,7 @@ interface AudioPlayerProps {
 
 export const AudioPlayer = ({ uri, title, duration }: AudioPlayerProps) => {
     const { colors } = useTheme();
+    const generation = useRef(0);
     const soundRef = useRef<Audio.Sound | null>(null);
     const [playing, setPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -25,21 +27,27 @@ export const AudioPlayer = ({ uri, title, duration }: AudioPlayerProps) => {
     const [durationSec, setDurationSec] = useState(duration ?? 0);
 
     useEffect(() => {
-        Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        const version = ++generation.current;
+        Audio.setAudioModeAsync({ playsInSilentModeIOS: true }).catch(() => {});
+        setPlaying(false); setLoading(false); setPositionSec(0); setDurationSec(duration ?? 0);
         return () => {
-            soundRef.current?.unloadAsync();
+            generation.current = version + 1;
+            const sound = soundRef.current; soundRef.current = null; void sound?.unloadAsync().catch(() => {});
         };
-    }, []);
+    }, [uri, duration]);
 
     const togglePlay = async () => {
         if (loading) return;
+        const version = generation.current;
+        try {
         if (!soundRef.current) {
             setLoading(true);
             const { sound } = await Audio.Sound.createAsync(
                 { uri },
                 { shouldPlay: true },
                 (status) => {
-                    if (!status.isLoaded) return;
+                    if (version !== generation.current) return;
+                    if (!status.isLoaded) { if ('error' in status && status.error) { setPlaying(false); setLoading(false); } return; }
                     setPositionSec(status.positionMillis / 1000);
                     setDurationSec(status.durationMillis ? status.durationMillis / 1000 : 0);
                     if (status.didJustFinish) {
@@ -48,6 +56,7 @@ export const AudioPlayer = ({ uri, title, duration }: AudioPlayerProps) => {
                     }
                 },
             );
+            if (version !== generation.current) { await sound.unloadAsync(); return; }
             soundRef.current = sound;
             setPlaying(true);
             setLoading(false);
@@ -62,6 +71,7 @@ export const AudioPlayer = ({ uri, title, duration }: AudioPlayerProps) => {
             await soundRef.current.playAsync();
             setPlaying(true);
         }
+        } catch (error: any) { setPlaying(false); notify('Playback unavailable', error.message || 'Unable to load this audio file.'); } finally { setLoading(false); }
     };
 
     const handleStop = async () => {
@@ -79,10 +89,10 @@ export const AudioPlayer = ({ uri, title, duration }: AudioPlayerProps) => {
         <View style={[s.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Pressable style={[s.playBtn, { backgroundColor: colors.primaryGlow }]} onPress={togglePlay}>
                 {loading
-                    ? <ActivityIndicator color="#fff" size="small" />
+                    ? <ActivityIndicator color={colors.onPrimary} size="small" />
                     : playing
-                        ? <Pause size={16} color="#fff" />
-                        : <Play size={16} color="#fff" />
+                        ? <Pause size={16} color={colors.onPrimary} />
+                        : <Play size={16} color={colors.onPrimary} />
                 }
             </Pressable>
             <View style={s.info}>

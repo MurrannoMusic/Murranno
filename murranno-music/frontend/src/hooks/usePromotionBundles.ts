@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PromotionBundle, PromotionService, PromotionCategory } from '@/types/promotion';
-import { toast } from 'sonner';
 
 export const usePromotionBundles = () => {
   const [bundles, setBundles] = useState<PromotionBundle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchBundles();
@@ -13,6 +13,7 @@ export const usePromotionBundles = () => {
 
   const fetchBundles = async () => {
     try {
+      setError(null);
       setLoading(true);
       
       // Fetch bundles
@@ -73,14 +74,15 @@ export const usePromotionBundles = () => {
 
       setBundles(formattedBundles);
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching bundles:', error);
-      toast.error('Failed to load promotional bundles');
     } finally {
       setLoading(false);
     }
   };
 
   return {
+    error,
     bundles,
     loading,
     refetch: fetchBundles,

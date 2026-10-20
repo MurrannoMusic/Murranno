@@ -12,7 +12,8 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
     <PageContainer showHeader={false}>
       <UnifiedTopBar />
       <GlobalAnnouncementBanner />
-      <div className="">
+      {/* Pages are built mobile-first; on wide screens they sit in a centred column like the Expo app. */}
+      <div className="w-full max-w-3xl mx-auto pt-2">
         {children || <Outlet />}
       </div>
     </PageContainer>

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CloudinaryImage } from '@/components/ui/cloudinary-image';
 import { PromotionBundle } from '@/types/promotion';
-import { Check, ChevronDown, Sparkles } from 'lucide-react';
+import { BadgeCheck, Check, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 interface BundleCardProps {
@@ -42,7 +42,7 @@ export const BundleCard = ({ bundle, onSelect, isRecommended }: BundleCardProps)
       {isRecommended && (
         <div className="absolute top-0 right-0 z-10">
           <div className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-xl shadow-md">
-            <Sparkles className="h-3 w-3 inline-block mr-1 mb-0.5" />
+            <BadgeCheck className="h-3 w-3 inline-block mr-1 mb-0.5" />
             Recommended
           </div>
         </div>

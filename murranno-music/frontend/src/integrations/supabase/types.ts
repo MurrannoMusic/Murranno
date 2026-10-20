@@ -17,7 +17,7 @@ export type Database = {
       admin_audit_logs: {
         Row: {
           action: string
-          admin_id: string
+          admin_id: string | null
           created_at: string
           id: string
           ip_address: string | null
@@ -27,7 +27,7 @@ export type Database = {
         }
         Insert: {
           action: string
-          admin_id: string
+          admin_id?: string | null
           created_at?: string
           id?: string
           ip_address?: string | null
@@ -37,7 +37,7 @@ export type Database = {
         }
         Update: {
           action?: string
-          admin_id?: string
+          admin_id?: string | null
           created_at?: string
           id?: string
           ip_address?: string | null
@@ -149,6 +149,36 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           youtube_url?: string | null
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          admin_id: string | null
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: string | null
+          target_id: string | null
+        }
+        Insert: {
+          action: string
+          admin_id?: string | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          target_id?: string | null
+        }
+        Update: {
+          action?: string
+          admin_id?: string | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          target_id?: string | null
         }
         Relationships: []
       }
@@ -318,7 +348,7 @@ export type Database = {
         Insert: {
           admin_notes?: string | null
           artist_id?: string | null
-          budget: number
+          budget?: number
           bundle_id?: string | null
           campaign_assets?: Json | null
           campaign_brief?: string | null
@@ -644,6 +674,33 @@ export type Database = {
         }
         Relationships: []
       }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          kind: string
+          metadata: Json | null
+          reference: string
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          kind: string
+          metadata?: Json | null
+          reference?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          kind?: string
+          metadata?: Json | null
+          reference?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       payout_methods: {
         Row: {
           account_name: string
@@ -698,10 +755,14 @@ export type Database = {
       platform_settings: {
         Row: {
           auto_approve_uploads: boolean
+          contact_email: string | null
+          contact_phone: string | null
           content_moderation_enabled: boolean
           created_at: string
           email_notifications_enabled: boolean
+          help_center_url: string | null
           id: string
+          maintenance_mode: boolean | null
           max_file_size_mb: number
           max_uploads_per_month: number
           minimum_payout_amount: number
@@ -709,17 +770,28 @@ export type Database = {
           payout_schedule: string
           platform_fee_percentage: number
           platform_name: string
+          privacy_url: string | null
           restricted_words: string[] | null
           sms_notifications_enabled: boolean
+          social_facebook: string | null
+          social_instagram: string | null
+          social_linkedin: string | null
+          social_twitter: string | null
           support_email: string
+          terms_url: string | null
           updated_at: string
+          usd_to_ngn_rate: number | null
         }
         Insert: {
           auto_approve_uploads?: boolean
+          contact_email?: string | null
+          contact_phone?: string | null
           content_moderation_enabled?: boolean
           created_at?: string
           email_notifications_enabled?: boolean
+          help_center_url?: string | null
           id?: string
+          maintenance_mode?: boolean | null
           max_file_size_mb?: number
           max_uploads_per_month?: number
           minimum_payout_amount?: number
@@ -727,17 +799,28 @@ export type Database = {
           payout_schedule?: string
           platform_fee_percentage?: number
           platform_name?: string
+          privacy_url?: string | null
           restricted_words?: string[] | null
           sms_notifications_enabled?: boolean
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_linkedin?: string | null
+          social_twitter?: string | null
           support_email?: string
+          terms_url?: string | null
           updated_at?: string
+          usd_to_ngn_rate?: number | null
         }
         Update: {
           auto_approve_uploads?: boolean
+          contact_email?: string | null
+          contact_phone?: string | null
           content_moderation_enabled?: boolean
           created_at?: string
           email_notifications_enabled?: boolean
+          help_center_url?: string | null
           id?: string
+          maintenance_mode?: boolean | null
           max_file_size_mb?: number
           max_uploads_per_month?: number
           minimum_payout_amount?: number
@@ -745,68 +828,84 @@ export type Database = {
           payout_schedule?: string
           platform_fee_percentage?: number
           platform_name?: string
+          privacy_url?: string | null
           restricted_words?: string[] | null
           sms_notifications_enabled?: boolean
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_linkedin?: string | null
+          social_twitter?: string | null
           support_email?: string
+          terms_url?: string | null
           updated_at?: string
-        }
-        Relationships: []
-      }
-      security_logs: {
-        Row: {
-          created_at: string
-          details: Json | null
-          event: string
-          id: string
-          ip_address: string | null
-          user_agent: string | null
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          details?: Json | null
-          event: string
-          id?: string
-          ip_address?: string | null
-          user_agent?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          details?: Json | null
-          event?: string
-          id?: string
-          ip_address?: string | null
-          user_agent?: string | null
-          user_id?: string | null
+          usd_to_ngn_rate?: number | null
         }
         Relationships: []
       }
       profiles: {
         Row: {
+          avatar_url: string | null
+          ban_reason: string | null
+          banned: boolean | null
           created_at: string | null
           email: string
+          first_name: string | null
           full_name: string | null
           id: string
+          id_document_type: string | null
+          id_document_url: string | null
+          kyc_status: "unverified" | "pending" | "verified" | "rejected" | null
+          kyc_tier: number | null
+          last_name: string | null
+          nin_number: string | null
           payout_lock_until: string | null
+          phone_number: string | null
+          pin_failed_attempts: number
+          pin_locked_until: string | null
           transaction_pin_hash: string | null
           updated_at: string | null
         }
         Insert: {
+          avatar_url?: string | null
+          ban_reason?: string | null
+          banned?: boolean | null
           created_at?: string | null
           email: string
+          first_name?: string | null
           full_name?: string | null
-          id: string
+          id?: string
+          id_document_type?: string | null
+          id_document_url?: string | null
+          kyc_status?: "unverified" | "pending" | "verified" | "rejected" | null
+          kyc_tier?: number | null
+          last_name?: string | null
+          nin_number?: string | null
           payout_lock_until?: string | null
+          phone_number?: string | null
+          pin_failed_attempts?: number
+          pin_locked_until?: string | null
           transaction_pin_hash?: string | null
           updated_at?: string | null
         }
         Update: {
+          avatar_url?: string | null
+          ban_reason?: string | null
+          banned?: boolean | null
           created_at?: string | null
           email?: string
+          first_name?: string | null
           full_name?: string | null
           id?: string
+          id_document_type?: string | null
+          id_document_url?: string | null
+          kyc_status?: "unverified" | "pending" | "verified" | "rejected" | null
+          kyc_tier?: number | null
+          last_name?: string | null
+          nin_number?: string | null
           payout_lock_until?: string | null
+          phone_number?: string | null
+          pin_failed_attempts?: number
+          pin_locked_until?: string | null
           transaction_pin_hash?: string | null
           updated_at?: string | null
         }
@@ -942,51 +1041,75 @@ export type Database = {
         Row: {
           artist_id: string
           copyright: string | null
+          copyright_holder: string | null
           cover_art_url: string | null
           created_at: string
+          description: string | null
+          distribution_platforms: string[] | null
           genre: string | null
           id: string
+          is_existing_release: boolean | null
+          isrc: string | null
           label: string | null
           language: string | null
+          recording_year: string | null
           release_date: string
           release_type: string
+          secondary_genre: string | null
           smartlink: string | null
-          status: string
+          status: "Draft" | "Pending" | "Published" | "Rejected" | "Takedown"
           title: string
+          upc: string | null
           upc_ean: string | null
           updated_at: string
         }
         Insert: {
           artist_id: string
           copyright?: string | null
+          copyright_holder?: string | null
           cover_art_url?: string | null
           created_at?: string
+          description?: string | null
+          distribution_platforms?: string[] | null
           genre?: string | null
           id?: string
+          is_existing_release?: boolean | null
+          isrc?: string | null
           label?: string | null
           language?: string | null
+          recording_year?: string | null
           release_date: string
           release_type: string
+          secondary_genre?: string | null
           smartlink?: string | null
-          status?: string
+          status?: "Draft" | "Pending" | "Published" | "Rejected" | "Takedown"
           title: string
+          upc?: string | null
           upc_ean?: string | null
           updated_at?: string
         }
         Update: {
           artist_id?: string
           copyright?: string | null
+          copyright_holder?: string | null
           cover_art_url?: string | null
           created_at?: string
+          description?: string | null
+          distribution_platforms?: string[] | null
           genre?: string | null
           id?: string
+          is_existing_release?: boolean | null
+          isrc?: string | null
           label?: string | null
           language?: string | null
+          recording_year?: string | null
           release_date?: string
           release_type?: string
+          secondary_genre?: string | null
           smartlink?: string | null
-          status?: string
+          status?: "Draft" | "Pending" | "Published" | "Rejected" | "Takedown"
           title?: string
+          upc?: string | null
           upc_ean?: string | null
           updated_at?: string
         }
@@ -999,6 +1122,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      security_logs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          event: string
+          id: string
+          ip_address: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          event: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          event?: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       streaming_data: {
         Row: {
@@ -1059,7 +1212,7 @@ export type Database = {
           id?: string
           max_artists?: number | null
           name: string
-          price_monthly: number
+          price_monthly?: number
           tier: Database["public"]["Enums"]["user_tier"]
         }
         Update: {
@@ -1128,15 +1281,88 @@ export type Database = {
         }
         Relationships: []
       }
+      support_tickets: {
+        Row: {
+          admin_notes: string | null
+          category: string
+          created_at: string
+          email: string | null
+          id: string
+          message: string
+          name: string | null
+          status: string
+          subject: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          category: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          message: string
+          name?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          category?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          message?: string
+          name?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      system_announcements: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          message: string
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          message: string
+          title: string
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          message?: string
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
       tracks: {
         Row: {
           audio_file_url: string | null
           created_at: string
           duration: number
+          explicit_content: boolean | null
+          featured_artists: string[] | null
           id: string
           isrc: string | null
           lyrics: string | null
+          producers: string[] | null
           release_id: string
+          songwriter_legal_names: string[] | null
           title: string
           track_number: number
           updated_at: string
@@ -1144,23 +1370,31 @@ export type Database = {
         Insert: {
           audio_file_url?: string | null
           created_at?: string
-          duration: number
+          duration?: number
+          explicit_content?: boolean | null
+          featured_artists?: string[] | null
           id?: string
           isrc?: string | null
           lyrics?: string | null
+          producers?: string[] | null
           release_id: string
+          songwriter_legal_names?: string[] | null
           title: string
-          track_number: number
+          track_number?: number
           updated_at?: string
         }
         Update: {
           audio_file_url?: string | null
           created_at?: string
           duration?: number
+          explicit_content?: boolean | null
+          featured_artists?: string[] | null
           id?: string
           isrc?: string | null
           lyrics?: string | null
+          producers?: string[] | null
           release_id?: string
+          songwriter_legal_names?: string[] | null
           title?: string
           track_number?: number
           updated_at?: string
@@ -1198,32 +1432,32 @@ export type Database = {
       }
       wallet_balance: {
         Row: {
-          available_balance: number | null
+          available_balance: number
           created_at: string | null
           currency: string
           id: string
-          pending_balance: number | null
-          total_earnings: number | null
+          pending_balance: number
+          total_earnings: number
           updated_at: string | null
           user_id: string | null
         }
         Insert: {
-          available_balance?: number | null
+          available_balance?: number
           created_at?: string | null
           currency?: string
           id?: string
-          pending_balance?: number | null
-          total_earnings?: number | null
+          pending_balance?: number
+          total_earnings?: number
           updated_at?: string | null
           user_id?: string | null
         }
         Update: {
-          available_balance?: number | null
+          available_balance?: number
           created_at?: string | null
           currency?: string
           id?: string
-          pending_balance?: number | null
-          total_earnings?: number | null
+          pending_balance?: number
+          total_earnings?: number
           updated_at?: string | null
           user_id?: string | null
         }
@@ -1239,21 +1473,23 @@ export type Database = {
           description: string | null
           failure_reason: string | null
           fee: number | null
+          hash: string | null
           id: string
+          ip_address: string | null
           net_amount: number
           payout_method_id: string | null
           paystack_response: Json | null
+          previous_hash: string | null
           reference: string
           requested_at: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          scheduled_for: string | null
           status: string
           transfer_code: string | null
           updated_at: string | null
-          user_id: string | null
-          scheduled_for: string | null
-          ip_address: string | null
           user_agent: string | null
+          user_id: string | null
         }
         Insert: {
           admin_notes?: string | null
@@ -1264,21 +1500,23 @@ export type Database = {
           description?: string | null
           failure_reason?: string | null
           fee?: number | null
+          hash?: string | null
           id?: string
+          ip_address?: string | null
           net_amount: number
           payout_method_id?: string | null
           paystack_response?: Json | null
+          previous_hash?: string | null
           reference: string
           requested_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          scheduled_for?: string | null
           status?: string
           transfer_code?: string | null
           updated_at?: string | null
-          user_id?: string | null
-          scheduled_for?: string | null
-          ip_address?: string | null
           user_agent?: string | null
+          user_id?: string | null
         }
         Update: {
           admin_notes?: string | null
@@ -1289,21 +1527,23 @@ export type Database = {
           description?: string | null
           failure_reason?: string | null
           fee?: number | null
+          hash?: string | null
           id?: string
+          ip_address?: string | null
           net_amount?: number
           payout_method_id?: string | null
           paystack_response?: Json | null
+          previous_hash?: string | null
           reference?: string
           requested_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          scheduled_for?: string | null
           status?: string
           transfer_code?: string | null
           updated_at?: string | null
-          user_id?: string | null
-          scheduled_for?: string | null
-          ip_address?: string | null
           user_agent?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {

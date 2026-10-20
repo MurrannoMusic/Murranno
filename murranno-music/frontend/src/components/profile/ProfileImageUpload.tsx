@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { Camera, User, ImageIcon, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { CloudinaryImage } from '@/components/ui/cloudinary-image';
 import { useCamera } from '@/hooks/useCamera';
 import { isNativeApp } from '@/utils/platformDetection';
 import { Button } from '@/components/ui/button';
@@ -102,22 +101,6 @@ export const ProfileImageUpload = ({ imageUrl, onImageSelect, disabled }: Profil
     }
   };
 
-  // Extract public ID from Cloudinary URL if present
-  const getPublicIdFromUrl = (url: string | null) => {
-    if (!url) return null;
-    if (url.includes('cloudinary.com')) {
-      const parts = url.split('/upload/');
-      if (parts.length > 1) {
-        const pathParts = parts[1].split('/');
-        // Remove version (v1234567890) and get the rest
-        const publicIdParts = pathParts.filter(p => !p.startsWith('v'));
-        return publicIdParts.join('/').replace(/\.[^/.]+$/, ''); // Remove file extension
-      }
-    }
-    return null;
-  };
-
-  const publicId = getPublicIdFromUrl(imageUrl);
 
   return (
     <>
@@ -127,26 +110,10 @@ export const ProfileImageUpload = ({ imageUrl, onImageSelect, disabled }: Profil
             <DropdownMenuTrigger asChild>
               <div className={`relative w-16 h-16 cursor-pointer`}>
                 <Avatar className="w-16 h-16 border-2 border-border">
-                  {publicId ? (
-                    <div className="w-full h-full overflow-hidden rounded-full">
-                      <CloudinaryImage
-                        publicId={publicId}
-                        alt="Profile"
-                        width={64}
-                        height={64}
-                        crop="fill"
-                        gravity="face"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      <AvatarImage src={imageUrl || undefined} alt="Profile" />
-                      <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                        <User className="w-8 h-8 text-muted-foreground" />
-                      </AvatarFallback>
-                    </>
-                  )}
+                  <AvatarImage src={imageUrl || undefined} alt="Profile" />
+                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                    <User className="w-8 h-8 text-muted-foreground" />
+                  </AvatarFallback>
                 </Avatar>
 
                 {!disabled && (
@@ -177,26 +144,10 @@ export const ProfileImageUpload = ({ imageUrl, onImageSelect, disabled }: Profil
             className={`relative w-16 h-16 ${!disabled && 'cursor-pointer'}`}
           >
             <Avatar className="w-16 h-16 border-2 border-border">
-              {publicId ? (
-                <div className="w-full h-full overflow-hidden rounded-full">
-                  <CloudinaryImage
-                    publicId={publicId}
-                    alt="Profile"
-                    width={64}
-                    height={64}
-                    crop="fill"
-                    gravity="face"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <>
-                  <AvatarImage src={imageUrl || undefined} alt="Profile" />
-                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                    <User className="w-8 h-8 text-muted-foreground" />
-                  </AvatarFallback>
-                </>
-              )}
+              <AvatarImage src={imageUrl || undefined} alt="Profile" />
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                <User className="w-8 h-8 text-muted-foreground" />
+              </AvatarFallback>
             </Avatar>
 
             {!disabled && (

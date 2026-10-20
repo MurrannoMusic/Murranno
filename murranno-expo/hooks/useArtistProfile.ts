@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import {notify, errorMessage} from '@/lib/api';
+import {useCloudinaryUpload} from '@/hooks/useCloudinaryUpload';
+import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { supabase } from '@/integrations/supabase/client';
+import { useFocusEffect } from 'expo-router';
+import { API_URL, supabase } from '@/integrations/supabase/client';
 
 export interface RNFile {
   uri: string;
@@ -32,6 +35,7 @@ export interface ArtistProfile {
 }
 
 export const useArtistProfile = () => {
+  const {uploadImage} = useCloudinaryUpload();
   const [profile, setProfile] = useState<ArtistProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -46,12 +50,11 @@ export const useArtistProfile = () => {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('get-artist-profile');
+      const [{ data, error }, { data: account, error: accountError }] = await Promise.all([supabase.functions.invoke('get-artist-profile'), supabase.functions.invoke('get-profile')]);
+      if (accountError) throw accountError;
 
       if (error) throw error;
-      if (data?.artist) {
-        setProfile(data.artist);
-      }
+      if (account?.profile) setProfile({ ...(data?.artist || { id: '', stage_name: account.profile.full_name || 'Artist' }), kyc_status: account.profile.kyc_status, kyc_tier: account.profile.kyc_tier });
     } catch (error: any) {
       console.error('Error fetching artist profile:', error);
       Alert.alert('Error', error.message || 'Failed to load profile');
@@ -60,7 +63,7 @@ export const useArtistProfile = () => {
     }
   };
 
-  const updateProfile = async (updates: Partial<ArtistProfile>) => {
+  const updateProfile = async (updates: Partial<ArtistProfile> & { personal?: Record<string, string> }) => {
     try {
       setUpdating(true);
       const { data, error } = await supabase.functions.invoke('update-artist-profile', {
@@ -71,13 +74,12 @@ export const useArtistProfile = () => {
 
       if (data?.artist) {
         setProfile(data.artist);
-        Alert.alert('Success', 'Profile updated successfully');
         return true;
       }
       return false;
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile');
+      notify('Profile not saved', await errorMessage(error));
       return false;
     } finally {
       setUpdating(false);
@@ -85,46 +87,11 @@ export const useArtistProfile = () => {
   };
 
   const uploadProfileImage = async (file: RNFile) => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file as any);
-      formData.append('folder', 'profile-images');
-
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // For RN, environment variables usually depend on Expo Constants or react-native-dotenv.
-      // Adjust with your actual env setup for RN
-      const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const url = `${SUPABASE_URL}/functions/v1/upload-image-cloudinary`;
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session?.access_token ?? ''}`,
-          apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-        },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Upload failed (${res.status}): ${errText}`);
-      }
-
-      const data = await res.json();
-      if (!data?.url) throw new Error('No URL returned from upload');
-
-      return data.url;
-    } catch (error: any) {
-      console.error('Error uploading image:', error);
-      Alert.alert('Error', error.message || 'Failed to upload image');
-      return null;
-    }
+    try { return (await uploadImage(file, 'profile-images')).url; }
+    catch (error: any) { notify('Image not uploaded', error.message); return null; }
   };
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  useFocusEffect(useCallback(() => { fetchProfile(); }, []));
 
   return {
     profile,

@@ -1,210 +1,66 @@
-import React, { useState, useMemo } from 'react'; // useState kept for showDropdown
-import {
-    View, Text, Image, StyleSheet, Pressable, Modal,
-} from 'react-native';
-import { User, Settings, LogOut, Sun, Moon, Monitor } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, StyleSheet, Pressable, Modal } from 'react-native';
+import { User, Settings, LogOut, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
-import { useThemeContext } from '@/contexts/ThemeContext';
 import { useCurrency, Currency } from '@/contexts/CurrencyContext';
 import { useArtistProfile } from '@/hooks/useArtistProfile';
 import { supabase } from '@/integrations/supabase/client';
 
-interface AppHeaderProps {
-    /** Show the NGN/USD currency toggle */
-    showCurrencyToggle?: boolean;
-}
-
-export const AppHeader = ({ showCurrencyToggle = true }: AppHeaderProps) => {
+export const AppHeader = ({ showCurrencyToggle = false }: { showCurrencyToggle?: boolean }) => {
     const router = useRouter();
-    const { colors, isDark } = useTheme();
-    const { themeMode, setThemeMode } = useThemeContext();
-    const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-
+    const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const { currency, setCurrency } = useCurrency();
-    const [showDropdown, setShowDropdown] = useState(false);
     const { profile } = useArtistProfile();
-
-    const handleLogout = async () => {
-        setShowDropdown(false);
-        await supabase.auth.signOut();
-        router.replace('/sign-in' as any);
-    };
-
-    const getInitials = (name: string) => {
-        if (!name) return 'MU';
-        return name
-            .split(' ')
-            .map((n) => n[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 2);
-    };
-
+    const [open, setOpen] = useState(false);
+    const name = profile?.stage_name || 'Murranno artist';
+    const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     return (
-        <View style={s.header}>
-            {/* Logo */}
-            <Image
-                source={require('@/assets/images/logo.png')}
-                style={s.logo}
-                resizeMode="contain"
-            />
-
-            <View style={s.right}>
-                {/* Currency toggle */}
-                {showCurrencyToggle && (
-                    <View style={s.currencyToggle}>
-                        {(['NGN', 'USD'] as Currency[]).map((c) => (
-                            <Pressable
-                                key={c}
-                                style={[s.currencyBtn, currency === c && s.currencyBtnActive]}
-                                onPress={() => setCurrency(c)}
-                            >
-                                <Text style={[s.currencyText, currency === c && s.currencyTextActive]}>
-                                    {c}
-                                </Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                )}
-
-                {/* Avatar / Dropdown trigger */}
-                <Pressable style={s.avatar} onPress={() => setShowDropdown(true)}>
-                    {profile?.profile_image ? (
-                        <Image source={{ uri: profile.profile_image }} style={s.avatarImg} />
-                    ) : (
-                        <Text style={s.avatarText}>{getInitials(profile?.stage_name || 'Murranno User')}</Text>
-                    )}
-                </Pressable>
+        <View style={{ backgroundColor: colors.background, paddingTop: insets.top + 12 }}>
+            <View style={s.header}>
+                <Image source={require('@/assets/images/logo.png')} style={s.logo} resizeMode="contain" accessibilityLabel="Murranno" />
+                <View style={s.actions}>
+                    {showCurrencyToggle && <View style={[s.currency, { borderColor: colors.border }]}>
+                        {(['NGN', 'USD'] as Currency[]).map(value => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: currency === value }} onPress={() => setCurrency(value)} style={[s.currencyButton, currency === value && { backgroundColor: colors.secondary }]}>
+                            <Text style={{ color: currency === value ? colors.foreground : colors.mutedForeground, fontSize: 12, fontWeight: '600' }}>{value}</Text>
+                        </Pressable>)}
+                    </View>}
+                    <Pressable accessibilityRole="button" accessibilityLabel="Open account menu" onPress={() => setOpen(true)} style={[s.avatar, { backgroundColor: colors.secondary }]}>
+                        {profile?.profile_image ? <Image source={{ uri: profile.profile_image }} style={s.avatarImage} /> : <Text style={{ color: colors.foreground, fontWeight: '600' }}>{initials}</Text>}
+                    </Pressable>
+                </View>
             </View>
-
-            {/* Dropdown */}
-            <Modal
-                visible={showDropdown}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowDropdown(false)}
-            >
-                <Pressable style={s.overlay} onPress={() => setShowDropdown(false)}>
-                    <View style={s.dropdown}>
-                        <Text style={s.dropdownName}>{profile?.stage_name || 'Murranno Music'}</Text>
-                        <View style={s.dropdownDivider} />
-
-                        {[
-                            { label: 'Artist Profile', Icon: User,     route: '/app/profile' },
-                            { label: 'Account',        Icon: User,     route: '/app/account' },
-                            { label: 'Settings',       Icon: Settings,  route: '/app/settings' },
-                        ].map(({ label, Icon, route }) => (
-                            <Pressable
-                                key={label}
-                                style={s.dropdownItem}
-                                onPress={() => { setShowDropdown(false); router.push(route as any); }}
-                            >
-                                <Icon size={16} color={colors.mutedForeground} />
-                                <Text style={s.dropdownItemText}>{label}</Text>
-                            </Pressable>
-                        ))}
-
-                        <View style={s.dropdownDivider} />
-
-                        {/* Theme pills */}
-                        <View style={s.themeRow}>
-                            <Pressable
-                                style={[s.themeBtn, themeMode === 'light' && s.themeBtnActive]}
-                                onPress={() => setThemeMode('light')}
-                            >
-                                <Sun size={16} color={themeMode === 'light' ? colors.primaryGlow : colors.mutedForeground} />
-                            </Pressable>
-                            <Pressable
-                                style={[s.themeBtn, themeMode === 'dark' && s.themeBtnActive]}
-                                onPress={() => setThemeMode('dark')}
-                            >
-                                <Moon size={16} color={themeMode === 'dark' ? colors.primaryGlow : colors.mutedForeground} />
-                            </Pressable>
-                            <Pressable
-                                style={[s.themeBtn, themeMode === 'system' && s.themeBtnActive]}
-                                onPress={() => setThemeMode('system')}
-                            >
-                                <Monitor size={16} color={themeMode === 'system' ? colors.primaryGlow : colors.mutedForeground} />
-                            </Pressable>
+            <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+                <View style={s.overlay}>
+                    <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close account menu" onPress={() => setOpen(false)} />
+                    <View style={[s.menu, { backgroundColor: colors.card, borderColor: colors.border, top: insets.top + 64 }]}>
+                        <View style={s.menuHeader}>
+                            <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 16, fontWeight: '600', flex: 1 }}>{name}</Text>
+                            <Pressable accessibilityLabel="Close account menu" hitSlop={10} onPress={() => setOpen(false)}><X size={20} color={colors.mutedForeground} /></Pressable>
                         </View>
-
-                        <View style={s.dropdownDivider} />
-
-                        <Pressable style={s.dropdownItem} onPress={handleLogout}>
-                            <LogOut size={16} color={colors.destructive} />
-                            <Text style={[s.dropdownItemText, { color: colors.destructive }]}>Log out</Text>
+                        {[
+                            { title: 'Artist profile', Icon: User, route: '/app/profile' },
+                            { title: 'Account', Icon: User, route: '/app/account' },
+                            { title: 'Settings', Icon: Settings, route: '/app/settings' },
+                        ].map(({ title, Icon, route }) => <Pressable key={title} accessibilityRole="button" style={s.menuRow} onPress={() => { setOpen(false); router.push(route as any); }}>
+                            <Icon size={18} color={colors.mutedForeground} /><Text style={{ color: colors.foreground, fontSize: 15 }}>{title}</Text>
+                        </Pressable>)}
+                        <Pressable accessibilityRole="button" style={[s.menuRow, { borderTopWidth: 1, borderTopColor: colors.border }]} onPress={async () => { setOpen(false); await supabase.auth.signOut(); router.replace('/sign-in' as any); }}>
+                            <LogOut size={18} color={colors.mutedForeground} /><Text style={{ color: colors.foreground, fontSize: 15 }}>Sign out</Text>
                         </Pressable>
                     </View>
-                </Pressable>
+                </View>
             </Modal>
         </View>
     );
 };
-
-const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boolean) =>
-    StyleSheet.create({
-        header: {
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 16, paddingTop: 52, paddingBottom: 10,
-            backgroundColor: colors.background,
-        },
-        logo: { width: 120, height: 36 },
-        right: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-
-        // Currency toggle
-        currencyToggle: {
-            flexDirection: 'row',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-            borderRadius: 20, padding: 3, gap: 2,
-        },
-        currencyBtn: {
-            paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16,
-        },
-        currencyBtnActive: {
-            backgroundColor: colors.primaryGlow,
-        },
-        currencyText: { fontSize: 12, fontWeight: '700', color: colors.mutedForeground },
-        currencyTextActive: { color: '#fff' },
-
-        // Avatar
-        avatar: {
-            width: 36, height: 36, borderRadius: 18,
-            backgroundColor: colors.primaryGlow,
-            justifyContent: 'center', alignItems: 'center',
-            overflow: 'hidden',
-        },
-        avatarImg: { width: '100%', height: '100%' },
-        avatarText: { fontSize: 13, fontWeight: '800', color: '#fff' },
-
-        // Dropdown
-        overlay: { flex: 1 },
-        dropdown: {
-            position: 'absolute', top: 92, right: 16,
-            backgroundColor: isDark ? '#101d36' : colors.card,
-            borderRadius: 16, borderWidth: 1, borderColor: colors.border,
-            paddingVertical: 8, minWidth: 200,
-            shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 16, elevation: 8,
-        },
-        dropdownName: {
-            fontSize: 14, fontWeight: '700', color: colors.foreground,
-            paddingHorizontal: 16, paddingVertical: 10,
-        },
-        dropdownDivider: { height: 1, backgroundColor: colors.border, marginVertical: 4 },
-        dropdownItem: {
-            flexDirection: 'row', alignItems: 'center', gap: 10,
-            paddingHorizontal: 16, paddingVertical: 12,
-        },
-        dropdownItemText: { fontSize: 14, color: colors.foreground },
-        themeRow: {
-            flexDirection: 'row', alignItems: 'center', gap: 8,
-            paddingHorizontal: 16, paddingVertical: 10,
-        },
-        themeBtn: {
-            width: 36, height: 36, borderRadius: 18,
-            justifyContent: 'center', alignItems: 'center',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-        },
-        themeBtnActive: { backgroundColor: `${colors.primaryGlow}22` },
-    });
+const s = StyleSheet.create({
+    header: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    logo: { width: 136, height: 38, flexShrink: 1 }, actions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }, avatarImage: { width: '100%', height: '100%' },
+    currency: { flexDirection: 'row', borderWidth: 1, borderRadius: 8, padding: 2 }, currencyButton: { paddingHorizontal: 8, minHeight: 40, justifyContent: 'center', borderRadius: 6 },
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }, menu: { position: 'absolute', right: 24, width: 264, borderWidth: 1, borderRadius: 12, padding: 8 },
+    menuHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 }, menuRow: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+});

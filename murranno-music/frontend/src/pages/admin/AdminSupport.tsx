@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/admin/AdminLayout';
@@ -31,16 +32,12 @@ export default function AdminSupport() {
     const [replyMessage, setReplyMessage] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
 
-    const { data: tickets, isLoading } = useQuery({
+    const { data: tickets, isLoading, error, refetch } = useQuery({
         queryKey: ['admin-support-tickets', statusFilter],
         queryFn: async () => {
             let query = supabase
                 .from('support_tickets')
-                .select('*, user:user_email(email)') // Assuming a function or view, but for now we might need to join profiles if possible or just use raw user_id
-                // Actually standard join: users is not exposed. We might need to fetch profiles. 
-                // Let's try select *, profiles(email) if linked, but user_id is FK to auth.users.
-                // auth.users is not joinable directly. We usually join profiles.
-                // Let's fetch profiles(email) assuming profile exists.
+                .select('*, user:profiles(email)')
                 .order('created_at', { ascending: false });
 
             if (statusFilter !== 'all') {
@@ -125,11 +122,9 @@ export default function AdminSupport() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {isLoading ? (
-                                    <TableRow><TableCell colSpan={5}>Loading...</TableCell></TableRow>
-                                ) : tickets?.length === 0 ? (
-                                    <TableRow><TableCell colSpan={5}>No tickets found</TableCell></TableRow>
-                                ) : (
+                                {isLoading || error || !tickets?.length ? (
+                  <TableStateRow colSpan={5} loading={isLoading} error={error} onRetry={() => refetch()} empty={{ title: 'No support tickets', body: 'Requests from artists will show up here.' }} filtered={statusFilter !== 'all'} onClear={() => setStatusFilter('all')} />
+                ) : (
                                     tickets?.map((ticket) => (
                                         <TableRow key={ticket.id}>
                                             <TableCell>{format(new Date(ticket.created_at), 'MMM d, yyyy')}</TableCell>

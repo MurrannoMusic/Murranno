@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQuery } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +24,7 @@ export default function AdminAuditLogs() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data: logs, isLoading } = useQuery({
+  const { data: logs, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-audit-logs', page],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -61,14 +62,8 @@ export default function AdminAuditLogs() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center">Loading logs...</TableCell>
-                  </TableRow>
-                ) : logs?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center">No logs found</TableCell>
-                  </TableRow>
+                {isLoading || error || !logs?.length ? (
+                  <TableStateRow colSpan={5} loading={isLoading} error={error} onRetry={() => refetch()} empty={{ title: page > 1 ? 'No more logs' : 'No audit logs yet', body: 'Admin actions are recorded here.' }} />
                 ) : (
                   logs?.map((log) => (
                     <TableRow key={log.id}>

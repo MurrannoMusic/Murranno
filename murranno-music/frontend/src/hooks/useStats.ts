@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
 export interface StatsSummary {
   totalStreams: number;
@@ -17,6 +16,7 @@ export const useStats = () => {
     activeReleases: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchStats();
@@ -24,6 +24,7 @@ export const useStats = () => {
 
   const fetchStats = async () => {
     try {
+      setError(null);
       setLoading(true);
 
       // Fetch analytics data for stats
@@ -55,8 +56,8 @@ export const useStats = () => {
       });
 
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching stats:', error);
-      toast.error('Failed to load statistics');
     } finally {
       setLoading(false);
     }
@@ -86,6 +87,7 @@ export const useStats = () => {
   };
 
   return {
+    error,
     stats,
     loading,
     refetch: fetchStats,

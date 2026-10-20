@@ -13,17 +13,17 @@ export const KYCGate = () => {
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
             <View style={styles.gateCard}>
                 <View style={[styles.shieldWrap, { backgroundColor: isDark ? 'rgba(251,191,36,0.1)' : 'rgba(251,191,36,0.05)', borderColor: 'rgba(251,191,36,0.2)' }]}>
-                    <ShieldAlert size={36} color="#fbbf24" />
+                    <ShieldAlert size={36} color={colors.warning} />
                 </View>
                 <Text style={[styles.gateTitle, { color: colors.foreground }]}>Verification Required</Text>
                 <Text style={[styles.gateSubtitle, { color: colors.mutedForeground }]}>
-                    To access this feature (Uploads & Transactions), you need to verify your identity. This is required by law for royalty payments.
+                    Verify your identity before submitting releases or withdrawing earnings.
                 </Text>
                 <Pressable
                     style={[styles.primaryBtn, { backgroundColor: colors.primaryGlow }]}
                     onPress={() => router.push('/app/kyc' as any)}
                 >
-                    <Text style={styles.primaryBtnText}>Complete KYC Verification</Text>
+                    <Text style={[styles.primaryBtnText, { color: colors.onPrimary }]}>Complete KYC Verification</Text>
                 </Pressable>
                 <Pressable style={styles.ghostBtn} onPress={() => router.back()}>
                     <Text style={[styles.ghostBtnText, { color: colors.foreground }]}>Go Back</Text>
@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
         width: '100%', borderRadius: 14,
         paddingVertical: 14, alignItems: 'center', marginTop: 16,
     },
-    primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+    primaryBtnText: { fontSize: 15, fontWeight: '600' },
     ghostBtn: { paddingVertical: 14, alignItems: 'center' },
     ghostBtnText: { fontSize: 14, fontWeight: '600' },
 });

@@ -23,6 +23,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { validateAudioFile, validateImageFile, validateImageDimensions, getAudioDuration } from "@/utils/fileValidation";
 import { formatFileSize } from "@/utils/formatters";
 import { isNativeApp } from "@/utils/platformDetection";
+import { PageTitle } from "@/components/layout/PagePrimitives";
+import { SuccessState } from "@/components/states/StateViews";
+
+const STEP_NAMES = ["Release details", "Tracks", "Distribution", "Credits", "Review"];
 
 const DISTRIBUTION_PLATFORMS = [
   "Spotify", "Apple Music", "TikTok", "Instagram",
@@ -42,6 +46,7 @@ interface TrackItem {
   trackType: "clean" | "explicit";
   lyrics: string;
   legalName: string;
+  isrc?: string;
 }
 
 // Upload page component
@@ -80,6 +85,7 @@ export default function Upload() {
 
   // Wizard State
   const [currentStep, setCurrentStep] = useState(1);
+  const [submitted, setSubmitted] = useState<{ id?: string; title: string } | null>(null);
   const totalSteps = 5;
 
   // Additional Metadata
@@ -304,9 +310,7 @@ export default function Upload() {
 
       hapticSuccess();
       await scheduleTrackUploadComplete(releaseTitle);
-      toast.success(`${releaseType} uploaded successfully!`);
-
-      setTimeout(() => navigate('/app/releases'), 1000);
+      setSubmitted({ id: data?.release?.id, title: releaseTitle });
 
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -363,44 +367,44 @@ export default function Upload() {
     window.scrollTo(0, 0);
   };
 
-  return (
-    <div className="smooth-scroll min-h-screen bg-background p-3 pb-20">
-      <div className="max-w-2xl mx-auto space-y-4">
+  if (submitted) {
+    return (
+      <div className="px-6 pb-10 space-y-5">
+        <PageTitle>New release</PageTitle>
+        <div className="rounded-xl border border-border bg-card">
+          <SuccessState
+            title={`“${submitted.title}” is submitted`}
+            body="Our team reviews every release against store guidelines, usually within 1–2 working days. We’ll email you when it’s approved and on its way to stores."
+            action={submitted.id ? { label: 'View release', to: `/app/releases/${submitted.id}` } : { label: 'View your releases', to: '/app/releases' }}
+            secondary={{ label: 'Upload another', onClick: () => window.location.reload() }}
+          />
+        </div>
+      </div>
+    );
+  }
 
-        {/* Progress Stepper */}
-        <div className="mb-6">
-          <div className="flex justify-between mb-1">
-            {[1, 2, 3, 4, 5].map((step) => (
-              <div
-                key={step}
-                className={`flex flex-col items-center flex-1 ${step <= currentStep ? 'text-primary' : 'text-muted-foreground'}`}
-              >
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center mb-1 text-xs font-medium border transition-colors ${step === currentStep ? 'bg-primary text-primary-foreground border-primary' :
-                  step < currentStep ? 'bg-primary/20 border-primary text-primary' :
-                    'bg-background border-muted text-muted-foreground'
-                  }`}>
-                  {step}
-                </div>
-                <span className="text-[10px] uppercase tracking-wider hidden sm:block">
-                  {step === 1 && "Basics"}
-                  {step === 2 && "The Music"}
-                  {step === 3 && "Distribution"}
-                  {step === 4 && "Credits"}
-                  {step === 5 && "Review"}
-                </span>
-              </div>
+  return (
+    <div className="px-6 pb-10">
+      <div className="space-y-5">
+
+        {/* Header + progress, same as the Expo wizard */}
+        <div className="space-y-4">
+          <PageTitle>New release</PageTitle>
+          <div className="flex items-center justify-between text-[13px]">
+            <span className="text-muted-foreground">Step {currentStep} of {totalSteps}</span>
+            <span className="font-medium">{STEP_NAMES[currentStep - 1]}</span>
+          </div>
+          <div className="flex gap-1.5" aria-hidden>
+            {STEP_NAMES.map((name, i) => (
+              <span key={name} className={`h-1 flex-1 rounded-full transition-colors ${i < currentStep ? 'bg-primary' : 'bg-secondary'}`} />
             ))}
           </div>
-          <Progress value={(currentStep / totalSteps) * 100} className="h-1" />
         </div>
 
         {/* Step 1: Basics */}
         {currentStep === 1 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-bold">Release Info</h2>
-              <p className="text-xs text-muted-foreground">General details for your {releaseType}</p>
-            </div>
+            <p className="text-sm text-muted-foreground">General details for your {releaseType}</p>
 
             <Card className="p-4 space-y-3">
               <div>
@@ -510,10 +514,7 @@ export default function Upload() {
         {/* Step 2: The Music */}
         {currentStep === 2 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-bold">The Music</h2>
-              <p className="text-xs text-muted-foreground">Upload tracks for your {releaseType}</p>
-            </div>
+            <p className="text-sm text-muted-foreground">Upload tracks for your {releaseType}</p>
 
             <Card className="p-4">
               <input
@@ -573,10 +574,7 @@ export default function Upload() {
         {/* Step 3: Distribution */}
         {currentStep === 3 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-bold">Distribution</h2>
-              <p className="text-xs text-muted-foreground">Platforms and release settings</p>
-            </div>
+            <p className="text-sm text-muted-foreground">Platforms and release settings</p>
 
             <Card className="p-4 space-y-3">
               <div>
@@ -697,10 +695,7 @@ export default function Upload() {
         {/* Step 4: Track Credits */}
         {currentStep === 4 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-bold">Track Credits</h2>
-              <p className="text-xs text-muted-foreground">Individual details for each song</p>
-            </div>
+            <p className="text-sm text-muted-foreground">Individual details for each song</p>
 
             <div className="space-y-3">
               {tracks.map((track, index) => (
@@ -821,10 +816,7 @@ export default function Upload() {
         {/* Step 5: Review */}
         {currentStep === 5 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-bold">Review Release</h2>
-              <p className="text-xs text-muted-foreground">Double check everything before submitting</p>
-            </div>
+            <p className="text-sm text-muted-foreground">Double check everything before submitting</p>
 
             <Card className="p-4 space-y-4">
               <div className="flex items-start gap-4">
@@ -905,13 +897,13 @@ export default function Upload() {
         )}
 
         {/* Navigation Buttons */}
-        <div className="flex gap-4 pt-3 border-t pb-4">
+        <div className="flex gap-3 pt-4 border-t border-border">
           <Button
             type="button"
             variant="outline"
             onClick={handleBack}
             disabled={currentStep === 1 || isSubmitting}
-            className="flex-1"
+            className="flex-1 min-h-[52px] rounded-[10px] text-base"
           >
             Back
           </Button>
@@ -920,16 +912,16 @@ export default function Upload() {
             <Button
               type="button"
               onClick={handleNext}
-              className="flex-1"
+              className="flex-[2] min-h-[52px] rounded-[10px] text-base font-semibold"
             >
-              Next Step
+              Continue →
             </Button>
           ) : (
             <Button
               type="submit"
               onClick={handleSubmit}
               disabled={isSubmitting || uploading}
-              className="flex-1"
+              className="flex-[2] min-h-[52px] rounded-[10px] text-base font-semibold"
             >
               {isSubmitting ? "Uploading..." : "Submit Release"}
             </Button>

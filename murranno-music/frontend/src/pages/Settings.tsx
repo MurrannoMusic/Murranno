@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Moon, Sun, Monitor, Bell, User, Lock, HelpCircle, CreditCard, LogOut, Mail, Fingerprint, RefreshCw, Calendar, CheckCircle2, AlertCircle, ShieldCheck, History } from 'lucide-react';
+import { Moon, Sun, Monitor, LogOut, Calendar, ChevronRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import mmLogo from "@/assets/mm_logo.png";
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageTitle } from '@/components/layout/PagePrimitives';
+import { TOOL_ITEMS } from '@/components/mobile/BottomNavigation';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { AvatarDropdown } from '@/components/layout/AvatarDropdown';
 import { useTheme } from '@/components/ThemeProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -47,6 +46,9 @@ export const Settings = () => {
   // Wallet Security
   const { hasPin, setupPin, refetch: refetchSecurity } = useWalletSecurity();
   const [showPinDialog, setShowPinDialog] = useState(false);
+  // Changing an existing PIN is two steps: current PIN, then the new one.
+  const [currentPin, setCurrentPin] = useState<string | null>(null);
+  const askingCurrentPin = hasPin && currentPin === null;
   const [pinLoading, setPinLoading] = useState(false);
   const [showSecurityLogs, setShowSecurityLogs] = useState(false);
 
@@ -76,421 +78,187 @@ export const Settings = () => {
   };
 
   return (
-    <div className="smooth-scroll">
-      {/* Top Bar removed - using UnifiedTopBar */}
+    <div className="px-6 pb-10 space-y-6">
+      <PageTitle>Settings</PageTitle>
 
-      <div className="mobile-container space-y-3 mt-2 pb-16">
-        {/* Account Management */}
-        <Card className="bg-card border border-border rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <User className="h-3.5 w-3.5 text-primary" />
-              Account
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5 p-3 pt-0">
-            <Link to="/app/profile">
-              <button className="w-full flex items-center gap-3 p-2.5 bg-secondary/10 rounded-lg border border-border/50 hover:bg-secondary/20 transition-all text-left">
-                <User className="h-4 w-4 text-primary" />
-                <span className="text-xs font-medium text-card-foreground">Edit Profile</span>
-              </button>
-            </Link>
-
-            <button
-              onClick={() => setEmailDialogOpen(true)}
-              className="w-full flex items-center gap-3 p-2.5 bg-secondary/10 rounded-lg border border-border/50 hover:bg-secondary/20 transition-all text-left"
-            >
-              <Mail className="h-4 w-4 text-primary" />
-              <span className="text-xs font-medium text-card-foreground">Change Email</span>
-            </button>
-
-            <button
-              onClick={() => setPasswordDialogOpen(true)}
-              className="w-full flex items-center gap-3 p-2.5 bg-secondary/10 rounded-lg border border-border/50 hover:bg-secondary/20 transition-all text-left"
-            >
-              <Lock className="h-4 w-4 text-primary" />
-              <span className="text-xs font-medium text-card-foreground">Change Password</span>
-            </button>
-          </CardContent>
-        </Card>
-
-        {/* Subscription */}
-        <Card className="bg-card border border-border rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <CreditCard className="h-3.5 w-3.5 text-primary" />
-              Subscription
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 p-3 pt-0">
-            {isSubLoading ? (
-              <div className="flex items-center justify-center py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              </div>
-            ) : activeSubscription ? (
-              <>
-                <div className="p-3 bg-primary/5 rounded-lg border border-primary/10">
-                  <div className="flex justify-between items-start mb-1.5">
-                    <div>
-                      <h3 className="font-bold text-base text-primary leading-tight">{planDetails?.name || 'Pro Plan'}</h3>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <Badge variant="secondary" className="px-1.5 py-0 text-[10px] bg-emerald-500/10 text-emerald-500 border-0">
-                          Active
-                        </Badge>
-                        {activeSubscription.isTrial && (
-                          <Badge variant="secondary" className="px-1.5 py-0 text-[10px] bg-amber-500/10 text-amber-500 border-0">
-                            Trial
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-base leading-tight">{formatCurrency(planDetails?.price_monthly || 0)}</p>
-                      <p className="text-[10px] text-muted-foreground">/ month</p>
-                    </div>
-                  </div>
-
-                  {activeSubscription.current_period_end && (
-                    <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground bg-background/40 p-1.5 rounded-md">
-                      <Calendar className="h-3 w-3" />
-                      <span>Renews {new Date(activeSubscription.current_period_end).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Link to="/app/subscription/plans" className="col-span-2">
-                    <Button variant="outline" size="sm" className="w-full flex justify-between h-8 text-xs">
-                      <span>Change Plan</span>
-                      <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
-                  </Link>
-                  <Button variant="ghost" className="text-[10px] text-muted-foreground h-7 py-0">
-                    Payment Methods
-                  </Button>
-                  <Button variant="ghost" className="text-[10px] text-muted-foreground h-7 py-0">
-                    Billing History
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-2 space-y-2">
-                <div className="p-2 bg-secondary/20 rounded-full w-fit mx-auto">
-                  <AlertCircle className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-medium">No Active Subscription</h3>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Upgrade to unlock premium features</p>
-                </div>
-                <Link to="/app/subscription/plans">
-                  <Button size="sm" className="w-full h-8 text-xs">View Plans</Button>
-                </Link>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Security Settings */}
-        <Card className="bg-card border border-border rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-              Security
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5 p-3 pt-0">
-            {/* PIN Setup */}
-            <div className="p-2.5 bg-secondary/10 rounded-lg border border-border/50">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Lock className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-card-foreground">Transaction PIN</p>
-                    <p className="text-[10px] text-muted-foreground">{hasPin ? 'PIN is active' : 'PIN not set'}</p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant={hasPin ? "outline" : "default"}
-                  className="h-7 text-[10px]"
-                  onClick={() => setShowPinDialog(true)}
-                >
-                  {hasPin ? 'Change PIN' : 'Set PIN'}
-                </Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground italic">
-                Required for withdrawals and bank account modifications.
-              </p>
-            </div>
-
-            {/* Biometric */}
-            {biometricAvailable && (
-              <div className="flex items-center justify-between p-2.5 bg-secondary/10 rounded-lg border border-border/50">
-                <div className="flex-1">
-                  <p className="text-xs font-semibold text-card-foreground">{biometricType} Login</p>
-                  <p className="text-[10px] text-muted-foreground">Use biometrics to log in</p>
-                </div>
-                <Switch
-                  checked={biometricEnabled}
-                  className="scale-75"
-                  onCheckedChange={(checked) => {
-                    setBiometricEnabled(checked);
-                    localStorage.setItem('biometric_enabled', String(checked));
-                    toast.success(checked ? 'Biometric enabled' : 'Biometric disabled');
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Security Logs Toggle */}
-            <div className="pt-2 border-t border-border/50">
-              <button
-                onClick={() => setShowSecurityLogs(!showSecurityLogs)}
-                className="w-full flex items-center justify-between p-2 flex items-center gap-2 hover:bg-secondary/10 rounded-lg transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <History className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-[10px] font-medium text-muted-foreground">Recent Security Activity</span>
-                </div>
-                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-secondary/20">
-                  {showSecurityLogs ? 'Hide' : 'Show'}
-                </Badge>
-              </button>
-
-              {showSecurityLogs && <SecurityActivityLog />}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notifications */}
-        <Card className="bg-card border border-border rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Bell className="h-3.5 w-3.5 text-primary" />
-              Notifications
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5 p-3 pt-0">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              </div>
-            ) : (
-              <>
-                {[
-                  { id: 'email_notifications', label: 'Email Notifications', sub: 'Receive updates via email' },
-                  { id: 'push_notifications', label: 'Push Notifications', sub: 'Get real-time alerts' },
-                  { id: 'in_app_notifications', label: 'In-App Notifications', sub: 'Show alerts in app' },
-                  { id: 'release_updates', label: 'Release Updates', sub: 'Track status changes' },
-                  { id: 'campaign_updates', label: 'Campaign Updates', sub: 'Promotion updates' },
-                  { id: 'earnings_alerts', label: 'Earnings Alerts', sub: 'Payment notifications' },
-                ].map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-2.5 bg-secondary/10 rounded-lg border border-border/50">
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-card-foreground">{item.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{item.sub}</p>
-                    </div>
-                    <Switch
-                      checked={!!preferences?.[item.id as keyof typeof preferences]}
-                      className="scale-75"
-                      onCheckedChange={(checked) => updatePreference(item.id as any, checked)}
-                    />
-                  </div>
-                ))}
-
-                <div className="flex items-center justify-between p-2.5 bg-secondary/10 rounded-lg border border-border/50">
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-card-foreground">Marketing Emails</p>
-                    <p className="text-[10px] text-muted-foreground">Product offers</p>
-                  </div>
-                  <Switch
-                    checked={preferences?.marketing_emails ?? false}
-                    className="scale-75"
-                    onCheckedChange={(checked) => updatePreference('marketing_emails', checked)}
-                  />
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Theme Settings */}
-        <Card className="bg-card border border-border rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Moon className="h-3.5 w-3.5 text-primary" />
-              Appearance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0">
-            <div className="flex items-center gap-2">
-              {[
-                { id: 'light', icon: Sun, label: 'Light' },
-                { id: 'dark', icon: Moon, label: 'Dark' },
-                { id: 'system', icon: Monitor, label: 'System' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTheme(t.id as any)}
-                  className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-lg border transition-all ${theme === t.id
-                    ? 'bg-primary/10 border-primary text-primary'
-                    : 'bg-secondary/10 border-border/50 text-muted-foreground hover:bg-secondary/20'
-                    }`}
-                >
-                  <t.icon className="h-4 w-4 mb-1" />
-                  <span className="text-[10px] font-medium">{t.label}</span>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Badge Settings */}
-        <BadgeSettings />
-
-        {/* Help & Support */}
-        <Card className="bg-card border border-border rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <HelpCircle className="h-3.5 w-3.5 text-primary" />
-              Help & Support
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5 p-3 pt-0">
+      <Group title="Appearance">
+        <div className="p-4 space-y-3">
+          <div>
+            <p className="text-base font-semibold">Choose your theme</p>
+            <p className="text-sm text-muted-foreground">Your choice is saved on this device.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'FAQs', path: '/faq' },
-              { label: 'Contact Support', path: '/support' },
-              { label: 'Terms of Service', path: '/terms' },
-              { label: 'Privacy Policy', path: '/privacy' },
-            ].map((item) => (
+              { id: 'light', icon: Sun, label: 'Light' },
+              { id: 'dark', icon: Moon, label: 'Dark' },
+              { id: 'system', icon: Monitor, label: 'System' },
+            ].map((t) => (
               <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className="w-full flex items-center justify-between p-2.5 bg-secondary/10 rounded-lg border border-border/50 hover:bg-secondary/20 transition-all text-left"
+                key={t.id}
+                type="button"
+                aria-pressed={theme === t.id}
+                onClick={() => setTheme(t.id as 'light' | 'dark' | 'system')}
+                className={`flex items-center justify-center gap-2 min-h-12 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${theme === t.id ? 'bg-primary/15 text-primary font-medium' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
               >
-                <span className="text-xs font-medium text-card-foreground">{item.label}</span>
-                <RefreshCw className="h-3 w-3 text-muted-foreground rotate-90" />
+                <t.icon className="h-4 w-4" /> {t.label}
               </button>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+      </Group>
 
-        {/* App Info */}
-        <Card className="bg-card border border-border rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <RefreshCw className="h-3.5 w-3.5 text-primary" />
-              App Info
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0">
-            <div className="p-2.5 bg-secondary/10 rounded-lg border border-border/50">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-card-foreground">Version</p>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{currentVersion || '1.0.0'}</Badge>
+      <Group title="Tools">
+        {TOOL_ITEMS.map((t) => <Row key={t.path} label={t.label} to={t.path} />)}
+      </Group>
+
+      <Group title="Account">
+        <Row label="Edit profile" to="/app/profile" />
+        <Row label="Change email" onClick={() => setEmailDialogOpen(true)} />
+        <Row label="Change password" onClick={() => setPasswordDialogOpen(true)} />
+      </Group>
+
+      <Group title="Subscription">
+        {isSubLoading ? (
+          <div className="p-4 grid place-items-center"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
+        ) : activeSubscription ? (
+          <div className="p-4 flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-base font-semibold">{planDetails?.name || 'Current plan'}</p>
+              <div className="flex gap-1.5">
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px] bg-success/10 text-success border-0">Active</Badge>
+                {activeSubscription.isTrial && <Badge variant="secondary" className="px-1.5 py-0 text-[10px] bg-warning/10 text-warning border-0">Trial</Badge>}
               </div>
-              <Button
-                onClick={checkForUpdate}
-                disabled={isChecking}
-                variant="outline"
-                size="sm"
-                className="w-full h-8 text-xs border-border/50"
-              >
-                {isChecking ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Checking...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                    Check Updates
-                  </>
-                )}
-              </Button>
-              {updateAvailable && (
-                <Button
-                  onClick={performImmediateUpdate}
-                  className="w-full mt-2 h-8 text-xs bg-primary hover:bg-primary/90"
-                >
-                  Update Now
-                </Button>
+              {activeSubscription.current_period_end && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" /> Renews {new Date(activeSubscription.current_period_end).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
               )}
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-right font-semibold tabular-nums">
+              {formatCurrency(planDetails?.price_monthly || 0)}
+              <span className="block text-[10px] font-normal text-muted-foreground">/ month</span>
+            </p>
+          </div>
+        ) : (
+          <div className="p-4 space-y-1">
+            <p className="text-base font-semibold">No active subscription</p>
+            <p className="text-sm text-muted-foreground">Upgrade to unlock premium features</p>
+          </div>
+        )}
+        <Row label="Plans and subscriptions" sub="Manage your access" to="/app/subscription/plans" />
+      </Group>
 
-        {/* Sign Out */}
-        <Button
-          onClick={handleSignOut}
-          variant="outline"
-          className="w-full bg-secondary/10 border-border/50 text-foreground hover:bg-secondary/20 rounded-xl h-10 text-sm font-semibold mb-4"
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Sign Out
-        </Button>
+      <Group title="Security">
+        <Row
+          label={hasPin ? 'Change transaction PIN' : 'Set transaction PIN'}
+          sub="Required for withdrawals and bank account changes"
+          onClick={() => setShowPinDialog(true)}
+        />
+        {biometricAvailable && (
+          <ToggleRow
+            label={`${biometricType} login`}
+            sub="Use biometrics to log in"
+            checked={biometricEnabled}
+            onChange={(checked) => {
+              setBiometricEnabled(checked);
+              localStorage.setItem('biometric_enabled', String(checked));
+              toast.success(checked ? 'Biometric enabled' : 'Biometric disabled');
+            }}
+          />
+        )}
+        <Row label={showSecurityLogs ? 'Hide recent security activity' : 'Recent security activity'} onClick={() => setShowSecurityLogs(!showSecurityLogs)} />
+        {showSecurityLogs && <div className="p-4"><SecurityActivityLog /></div>}
+      </Group>
 
-        {/* Danger Zone */}
-        <Card className="bg-destructive/5 border border-destructive/20 rounded-xl shadow-soft">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-sm font-semibold text-destructive flex items-center gap-2">
-              <AlertCircle className="h-3.5 w-3.5" />
-              Danger Zone
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0">
-            <div className="p-2.5 bg-destructive/10 rounded-lg border border-destructive/20">
-              <p className="text-[10px] text-destructive mb-3">
-                Deleting your account is permanent. All your data, including music and earnings, will be wiped immediately.
-              </p>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="w-full h-8 text-xs"
-                onClick={() => {
-                  if (confirm("CRITICAL WARNING: Are you absolutely sure? This action cannot be undone.")) {
-                    // In a real scenario, we'd Trigger a dedicated DeleteAccountDialog
-                    // For now, we'll just show a toast that this feature is protected
-                    // or mock the call if the edge function isn't ready.
-                    const handleDeleteAccount = async () => {
-                      try {
-                        const { error } = await supabase.functions.invoke('delete-account');
-                        if (error) throw error;
+      <Group title="Notifications">
+        {isLoading ? (
+          <div className="p-4 grid place-items-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+        ) : (
+          [
+            { id: 'email_notifications', label: 'Email notifications', sub: 'Receive updates via email' },
+            { id: 'push_notifications', label: 'Push notifications', sub: 'Get real-time alerts' },
+            { id: 'in_app_notifications', label: 'In-app notifications', sub: 'Show alerts in the app' },
+            { id: 'release_updates', label: 'Release updates', sub: 'Track status changes' },
+            { id: 'campaign_updates', label: 'Campaign updates', sub: 'Promotion updates' },
+            { id: 'earnings_alerts', label: 'Earnings alerts', sub: 'Payment notifications' },
+            { id: 'marketing_emails', label: 'Marketing emails', sub: 'Product offers' },
+          ].map((item) => (
+            <ToggleRow
+              key={item.id}
+              label={item.label}
+              sub={item.sub}
+              checked={!!preferences?.[item.id as keyof typeof preferences]}
+              onChange={(checked) => updatePreference(item.id as any, checked)}
+            />
+          ))
+        )}
+      </Group>
 
-                        toast.success("Account deleted successfully");
-                        await supabase.auth.signOut();
-                        navigate('/');
-                      } catch (error: any) {
-                        console.error('Error deleting account:', error);
-                        toast.error(error.message || "Failed to delete account. Please contact support.");
-                      } finally {
-                        // Assuming setIsDeleteOpen is a state setter for a dialog,
-                        // if not, this line might need adjustment or removal.
-                        // setIsDeleteOpen(false);
-                      }
-                    };
-                    handleDeleteAccount();
-                  }
-                }}
-              >
-                Delete Account
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <BadgeSettings />
+
+      <Group title="Help and support">
+        <Row label="FAQs" to="/faq" />
+        <Row label="Contact support" to="/support" />
+        <Row label="Terms of service" to="/terms" />
+        <Row label="Privacy policy" to="/privacy" />
+      </Group>
+
+      <Group title="App">
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-base">Version</p>
+            <span className="text-sm text-muted-foreground tabular-nums">{currentVersion || '1.0.0'}</span>
+          </div>
+          <Button onClick={checkForUpdate} disabled={isChecking} variant="outline" className="w-full">
+            {isChecking ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Checking…</> : 'Check for updates'}
+          </Button>
+          {updateAvailable && <Button onClick={performImmediateUpdate} className="w-full">Update now</Button>}
+        </div>
+      </Group>
+
+      <Button onClick={handleSignOut} variant="outline" className="w-full min-h-12 text-base font-semibold">
+        <LogOut className="h-4 w-4 mr-2" /> Sign out
+      </Button>
+
+      <Group title="Danger zone">
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-muted-foreground">Deleting your account is permanent. Your music, earnings history and profile are removed.</p>
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={async () => {
+              if (!confirm('Delete your account? This cannot be undone.')) return;
+              try {
+                const { error } = await supabase.functions.invoke('delete-account');
+                if (error) throw error;
+                toast.success('Account deleted');
+                await supabase.auth.signOut();
+                navigate('/');
+              } catch (error: any) {
+                console.error('Error deleting account:', error);
+                toast.error(error.message || 'Failed to delete account. Please contact support.');
+              }
+            }}
+          >
+            Delete account
+          </Button>
+        </div>
+      </Group>
 
       <ChangeEmailDialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen} />
       <ChangePasswordDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} />
 
       <TransactionPinDialog
         open={showPinDialog}
-        onClose={() => setShowPinDialog(false)}
+        onClose={() => { setShowPinDialog(false); setCurrentPin(null); }}
         onSuccess={async (pin) => {
+          if (askingCurrentPin) {
+            setCurrentPin(pin);
+            return;
+          }
           setPinLoading(true);
-          const success = await setupPin(pin);
+          const success = await setupPin(pin, currentPin ?? undefined);
+          setCurrentPin(null);
           if (success) {
             setShowPinDialog(false);
             refetchSecurity();
@@ -511,11 +279,44 @@ export const Settings = () => {
           setPinLoading(false);
         }}
         loading={pinLoading}
-        title={hasPin ? "Update Transaction PIN" : "Set Transaction PIN"}
-        description={hasPin ? "Enter a new 4-digit PIN to update your security." : "Create a 4-digit PIN to secure your wallet actions."}
+        title={askingCurrentPin ? "Enter Current PIN" : hasPin ? "Update Transaction PIN" : "Set Transaction PIN"}
+        description={askingCurrentPin ? "Confirm it's you with your current 4-digit PIN." : hasPin ? "Enter a new 4-digit PIN to update your security." : "Create a 4-digit PIN to secure your wallet actions."}
       />
     </div>
   );
 };
+
+// Grouped list, same as the Expo Settings screen.
+const Group = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <section className="space-y-2">
+    <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
+    <div className="rounded-xl bg-card border border-border divide-y divide-border overflow-hidden">{children}</div>
+  </section>
+);
+
+const rowClass = 'w-full flex items-center gap-3 px-4 min-h-14 py-3 text-left transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:bg-secondary/50';
+
+const Row = ({ label, sub, to, onClick }: { label: string; sub?: string; to?: string; onClick?: () => void }) => {
+  const body = (
+    <>
+      <span className="flex-1 min-w-0">
+        <span className="block text-base">{label}</span>
+        {sub && <span className="block text-xs text-muted-foreground">{sub}</span>}
+      </span>
+      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+    </>
+  );
+  return to ? <Link to={to} className={rowClass}>{body}</Link> : <button type="button" onClick={onClick} className={rowClass}>{body}</button>;
+};
+
+const ToggleRow = ({ label, sub, checked, onChange }: { label: string; sub?: string; checked: boolean; onChange: (v: boolean) => void }) => (
+  <label className="flex items-center gap-3 px-4 min-h-14 py-3 cursor-pointer">
+    <span className="flex-1 min-w-0">
+      <span className="block text-base">{label}</span>
+      {sub && <span className="block text-xs text-muted-foreground">{sub}</span>}
+    </span>
+    <Switch checked={checked} onCheckedChange={onChange} />
+  </label>
+);
 
 export default Settings;

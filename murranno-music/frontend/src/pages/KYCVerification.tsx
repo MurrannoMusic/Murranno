@@ -4,15 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { FieldError } from "@/components/forms/FieldError";
+import { SuccessState, friendlyError } from "@/components/states/StateViews";
+import { fieldA11y } from "@/lib/validation";
 import { supabase } from "@/integrations/supabase/client";
 import { useCloudinaryUpload } from "@/hooks/useCloudinaryUpload";
 import { ShieldCheck, Upload, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 
 export default function KYCVerification() {
     const navigate = useNavigate();
-    const { toast } = useToast();
     const { user, profile, refreshUserData } = useAuth();
     const { uploadImage, uploading } = useCloudinaryUpload();
 
@@ -20,11 +21,17 @@ export default function KYCVerification() {
     const [documentFile, setDocumentFile] = useState<File | null>(null);
     const [documentPreview, setDocumentPreview] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errors, setErrors] = useState<{ nin?: string; document?: string; form?: string }>({});
+    const [justSubmitted, setJustSubmitted] = useState(false);
+    const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            if (!/^image\/|^application\/pdf$/.test(file.type)) { setErrors({ document: 'Upload a photo (JPG or PNG) or a PDF of your ID' }); return; }
+            if (file.size > MAX_DOCUMENT_BYTES) { setErrors({ document: `This file is ${(file.size / 1024 / 1024).toFixed(1)} MB. Upload one under 5 MB.` }); return; }
+            setErrors({});
             setDocumentFile(file);
             const previewUrl = URL.createObjectURL(file);
             setDocumentPreview(previewUrl);
@@ -35,22 +42,12 @@ export default function KYCVerification() {
         e.preventDefault();
 
         if (!user) return;
-        if (!ninNumber) {
-            toast({
-                title: "Missing Information",
-                description: "Please enter your NIN Number.",
-                variant: "destructive"
-            });
-            return;
-        }
-        if (!documentFile) {
-            toast({
-                title: "Missing Document",
-                description: "Please upload your ID document.",
-                variant: "destructive"
-            });
-            return;
-        }
+        const found = {
+            nin: !ninNumber.trim() ? 'Enter your NIN' : /^\d{11}$/.test(ninNumber.replace(/\s/g, '')) ? undefined : 'Your NIN has exactly 11 digits',
+            document: documentFile ? undefined : 'Upload a photo or scan of your ID',
+        };
+        setErrors(found);
+        if (found.nin || found.document) return;
 
         setIsSubmitting(true);
 
@@ -62,7 +59,7 @@ export default function KYCVerification() {
             const { error } = await supabase
                 .from('profiles')
                 .update({
-                    nin_number: ninNumber,
+                    nin_number: ninNumber.replace(/\s/g, ''),
                     id_document_url: documentUrl,
                     id_document_type: 'national_id', // You can expand this dropdown later
                     kyc_status: 'pending',
@@ -74,21 +71,10 @@ export default function KYCVerification() {
 
             await refreshUserData();
 
-            toast({
-                title: "Verification Submitted",
-                description: "Your documents are being reviewed. You will be notified once approved.",
-            });
-
-            // Navigate back or to success state
-            navigate('/app/settings');
-
+            setJustSubmitted(true); // the pending view below confirms it
         } catch (error: any) {
             console.error('KYC Submission error:', error);
-            toast({
-                title: "Submission Failed",
-                description: error.message || "Could not submit verification. Please try again.",
-                variant: "destructive"
-            });
+            setErrors({ form: friendlyError(error).message });
         } finally {
             setIsSubmitting(false);
         }
@@ -104,6 +90,16 @@ export default function KYCVerification() {
 
     const isPending = profile.kyc_status === 'pending';
     const isVerified = profile.kyc_status === 'verified';
+
+    if (isPending && justSubmitted) {
+        return (
+            <div className="p-4 max-w-xl mx-auto">
+                <Card>
+                    <SuccessState title="Verification submitted" body="Thanks — we’re reviewing your ID now. This usually takes 24–48 hours, and we’ll email you as soon as you’re verified. You can keep using the app meanwhile." action={{ label: 'Back to dashboard', to: '/app/dashboard' }} />
+                </Card>
+            </div>
+        );
+    }
 
     if (isPending) {
         return (
@@ -153,7 +149,7 @@ export default function KYCVerification() {
             </div>
 
             <Card className="p-4">
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} noValidate className="space-y-4">
 
                     <div className="space-y-1.5">
                         <Label htmlFor="nin" className="text-xs">NIN Number (National Identification Number)</Label>
@@ -161,10 +157,13 @@ export default function KYCVerification() {
                             id="nin"
                             placeholder="Enter your 11-digit NIN"
                             value={ninNumber}
-                            onChange={(e) => setNinNumber(e.target.value)}
-                            required
+                            inputMode="numeric"
+                            maxLength={13}
+                            onChange={(e) => { setNinNumber(e.target.value.replace(/[^\d\s]/g, '')); setErrors({}); }}
                             className="h-9 text-sm"
+                            {...fieldA11y('nin', errors.nin)}
                         />
+                        <FieldError id="nin" error={errors.nin} />
                         <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <ShieldCheck className="w-3 h-3" />
                             Your info is encrypted securely.
@@ -174,8 +173,13 @@ export default function KYCVerification() {
                     <div className="space-y-1.5">
                         <Label className="text-xs">ID Document Upload</Label>
                         <div
-                            className="border-2 border-dashed border-input rounded-lg p-6 text-center hover:bg-accent/50 transition-colors cursor-pointer"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={documentFile ? 'Change ID document' : 'Upload ID document'}
+                            aria-describedby={errors.document ? 'document-error' : undefined}
+                            className={`border-2 border-dashed rounded-lg p-6 text-center hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${errors.document ? 'border-destructive' : 'border-input'}`}
                             onClick={() => fileInputRef.current?.click()}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
                         >
                             {documentPreview ? (
                                 <div className="relative">
@@ -201,6 +205,7 @@ export default function KYCVerification() {
                                 onChange={handleFileSelect}
                             />
                         </div>
+                        <FieldError id="document" error={errors.document} />
                     </div>
 
                     <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-3 flex gap-2 text-xs text-yellow-500">
@@ -209,6 +214,8 @@ export default function KYCVerification() {
                             Ensure your document is clear and matches your profile name to avoid rejection.
                         </p>
                     </div>
+
+                    {errors.form && <p role="alert" className="text-sm text-destructive">{errors.form}</p>}
 
                     <div className="flex flex-col gap-2 pt-2">
                         <Button type="submit" size="sm" className="w-full text-sm" disabled={isSubmitting || uploading}>

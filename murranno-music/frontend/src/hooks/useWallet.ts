@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { EarningsTransaction, PayoutMethod, WalletBalance, EarningsSource } from '@/types/wallet';
-import { toast } from 'sonner';
 
 export const useWallet = () => {
   const [balance, setBalance] = useState<WalletBalance | null>(null);
@@ -11,6 +10,7 @@ export const useWallet = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchWalletData();
@@ -18,6 +18,7 @@ export const useWallet = () => {
 
   const fetchWalletData = async () => {
     try {
+      setError(null);
       setLoading(true);
 
       // Fetch wallet balance
@@ -52,8 +53,8 @@ export const useWallet = () => {
         setEarningsSources(earningsData.sources);
       }
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching wallet data:', error);
-      toast.error('Failed to load wallet data');
     } finally {
       setLoading(false);
     }
@@ -68,6 +69,7 @@ export const useWallet = () => {
   }, [transactions, statusFilter, typeFilter]);
 
   return {
+    error,
     balance,
     transactions: filteredTransactions,
     allTransactions: transactions,

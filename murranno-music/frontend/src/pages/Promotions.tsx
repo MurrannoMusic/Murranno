@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { EmptyState, ErrorState } from '@/components/states/StateViews';
 import { Megaphone } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import mmLogo from "@/assets/mm_logo.png";
@@ -28,8 +29,8 @@ const PromotionsContent = () => {
   const [cartOpen, setCartOpen] = useState(false);
   const [cartCampaignDialogOpen, setCartCampaignDialogOpen] = useState(false);
 
-  const { services, loading: servicesLoading, categories } = usePromotionServices();
-  const { bundles, loading: bundlesLoading } = usePromotionBundles();
+  const { services, loading: servicesLoading, categories, error: servicesError, refetch: refetchServices } = usePromotionServices();
+  const { bundles, loading: bundlesLoading, error: bundlesError, refetch: refetchBundles } = usePromotionBundles();
   const { items: cartItems } = useCart();
 
   const filteredServices = selectedCategory === 'all'
@@ -137,6 +138,10 @@ const PromotionsContent = () => {
                   <Card key={i} className="h-[350px] animate-pulse bg-muted/50 rounded-2xl border-none" />
                 ))}
               </div>
+            ) : bundlesError ? (
+              <ErrorState error={bundlesError} title="Couldn’t load promotion bundles" onRetry={refetchBundles} />
+            ) : bundles.length === 0 ? (
+              <EmptyState icon={Megaphone} title="No bundles available right now" body="New promotion packages are on the way. Meanwhile you can build your own from individual services." />
             ) : (
               <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 px-1">
                 {bundles.map((bundle, index) => (
@@ -175,14 +180,12 @@ const PromotionsContent = () => {
                     <Card key={i} className="h-72 animate-pulse bg-muted/50 rounded-2xl border-none" />
                   ))}
                 </div>
+              ) : servicesError ? (
+                <ErrorState error={servicesError} title="Couldn’t load promotion services" onRetry={refetchServices} />
+              ) : services.length === 0 ? (
+                <EmptyState icon={Megaphone} title="No services available right now" body="Check back soon for playlist pitching, ads and influencer campaigns." />
               ) : filteredServices.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center bg-secondary/5 rounded-2xl border border-dashed border-border/50 mx-1">
-                  <Megaphone className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                  <h3 className="text-base font-semibold text-foreground">No services found</h3>
-                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                    Try adjusting your filters or check back later for new promotional options.
-                  </p>
-                </div>
+                <EmptyState icon={Megaphone} title="Nothing in this category yet" secondary={{ label: 'Show all services', onClick: () => setSelectedCategory('all') }} />
               ) : (
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 px-1">
                   {filteredServices.map((service) => (

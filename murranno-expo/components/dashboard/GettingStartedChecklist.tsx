@@ -13,7 +13,7 @@ export const GettingStartedChecklist = () => {
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
-    const isProfileComplete = !!(profile?.first_name && profile?.stage_name);
+    const isProfileComplete = !!profile?.stage_name;
     const hasUploadedTrack  = releases.length > 0;
 
     const steps = [

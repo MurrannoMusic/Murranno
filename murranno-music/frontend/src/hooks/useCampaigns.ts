@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Campaign, CampaignStats } from '@/types/campaign';
-import { toast } from 'sonner';
 
 export const useCampaigns = () => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -12,6 +11,7 @@ export const useCampaigns = () => {
     totalReach: '0',
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     fetchCampaigns();
@@ -19,6 +19,7 @@ export const useCampaigns = () => {
 
   const fetchCampaigns = async (status?: string) => {
     try {
+      setError(null);
       setLoading(true);
       const { data, error } = await supabase.functions.invoke('get-user-campaigns', {
         body: { status }
@@ -38,8 +39,8 @@ export const useCampaigns = () => {
         totalReach: '0',
       });
     } catch (error: any) {
+      setError(error);
       console.error('Error fetching campaigns:', error);
-      toast.error('Failed to load campaigns');
     } finally {
       setLoading(false);
     }
@@ -65,6 +66,7 @@ export const useCampaigns = () => {
   };
 
   return {
+    error,
     campaigns,
     stats,
     getFilteredCampaigns,

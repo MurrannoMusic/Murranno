@@ -1,12 +1,18 @@
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export const SocialLoginButtons = () => {
   const { signInWithGoogle, signInWithApple } = useAuth();
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingApple, setLoadingApple] = useState(false);
+  // Same as Expo: a provider is only clickable once its keys are configured on the API.
+  const [providers, setProviders] = useState({ google: false, apple: false });
+  useEffect(() => {
+    supabase.functions.invoke('get-mobile-config').then(({ data }) => data?.providers && setProviders(data.providers));
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoadingGoogle(true);
@@ -34,10 +40,10 @@ export const SocialLoginButtons = () => {
     <div className="space-y-4">
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-white/20" />
+          <span className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-black/30 px-2 text-white/70 drop-shadow-md">Or continue with</span>
+          <span className="bg-background px-2 text-muted-foreground tracking-wide">Or continue with</span>
         </div>
       </div>
 
@@ -46,8 +52,8 @@ export const SocialLoginButtons = () => {
           type="button"
           variant="outline"
           onClick={handleGoogleLogin}
-          disabled={loadingGoogle || loadingApple}
-          className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+          disabled={!providers.google || loadingGoogle || loadingApple}
+          className="min-h-12"
         >
           {loadingGoogle ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -80,8 +86,8 @@ export const SocialLoginButtons = () => {
           type="button"
           variant="outline"
           onClick={handleAppleLogin}
-          disabled={loadingGoogle || loadingApple}
-          className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+          disabled={!providers.apple || loadingGoogle || loadingApple}
+          className="min-h-12"
         >
           {loadingApple ? (
             <Loader2 className="w-4 h-4 animate-spin" />

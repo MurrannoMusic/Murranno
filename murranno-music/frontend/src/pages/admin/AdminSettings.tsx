@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { CardSkeleton, ErrorState } from '@/components/states/StateViews';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -24,8 +25,10 @@ import {
   Save,
   Users,
   AlertTriangle,
-  Server
+  Server,
+  Mail
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { AdminTeamSettings } from '@/components/admin/settings/AdminTeamSettings';
 
@@ -86,7 +89,7 @@ export default function AdminSettings() {
   });
 
   // Fetch current settings
-  const { data: settingsData, isLoading } = useQuery({
+  const { data: settingsData, isLoading, error: settingsError, refetch: refetchSettings } = useQuery({
     queryKey: ['platform-settings'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('get-platform-settings');
@@ -181,9 +184,16 @@ export default function AdminSettings() {
   if (isLoading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-96">
-          <p className="text-muted-foreground">Loading settings...</p>
-        </div>
+        <div className="p-6 space-y-4"><CardSkeleton lines={4} /><CardSkeleton lines={4} /></div>
+      </AdminLayout>
+    );
+  }
+
+  // Never show the form over defaults: saving them would overwrite the real settings.
+  if (settingsError) {
+    return (
+      <AdminLayout>
+        <ErrorState error={settingsError} title="Couldn’t load platform settings" onRetry={() => refetchSettings()} className="py-24" />
       </AdminLayout>
     );
   }

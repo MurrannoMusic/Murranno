@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { EmptyState, ErrorState, ListSkeleton, NoResults } from '@/components/states/StateViews';
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -17,7 +18,7 @@ export default function AdminSubscriptions() {
   const [selectedSubscription, setSelectedSubscription] = useState<any>(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
 
-  const { data: subscriptions, isLoading, refetch } = useQuery({
+  const { data: subscriptions, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-subscriptions', tierFilter, statusFilter],
     queryFn: async () => {
       let query = supabase
@@ -133,7 +134,9 @@ export default function AdminSubscriptions() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="text-center py-8">Loading subscriptions...</div>
+              <ListSkeleton rows={5} media={false} />
+            ) : error ? (
+              <ErrorState error={error} title="Couldn’t load subscriptions" onRetry={() => refetch()} />
             ) : subscriptions && subscriptions.length > 0 ? (
               <Table>
                 <TableHeader>
@@ -190,9 +193,9 @@ export default function AdminSubscriptions() {
                 </TableBody>
               </Table>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No subscriptions found
-              </div>
+              tierFilter !== 'all' || statusFilter !== 'all'
+                ? <NoResults what="subscriptions" onClear={() => { setTierFilter('all'); setStatusFilter('all'); }} />
+                : <EmptyState title="No subscriptions yet" body="Paid plans artists start will show up here." />
             )}
           </CardContent>
         </Card>

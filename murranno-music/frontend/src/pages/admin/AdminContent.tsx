@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +47,8 @@ export default function AdminContent() {
     totalPages,
     stats,
     isLoading,
+    error,
+    refetch,
     moderateRelease
   } = useAdminReleases({
     page,
@@ -190,18 +193,8 @@ export default function AdminContent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : releases.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center">
-                      No releases found
-                    </TableCell>
-                  </TableRow>
+                {isLoading || error || !releases.length ? (
+                  <TableStateRow colSpan={8} loading={isLoading} error={error} onRetry={() => refetch()} empty={{ title: 'No releases yet', body: 'Releases artists submit will show up here for review.' }} filtered={!!search || Object.values(filters).some((v) => v !== 'all')} onClear={resetFilters} />
                 ) : (
                   releases.map((release) => (
                     <TableRow key={release.id}>

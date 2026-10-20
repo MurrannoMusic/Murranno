@@ -1,25 +1,20 @@
 import React, { useState, useMemo } from 'react';
+import { EmptyState, ErrorState, ListSkeleton, NoResults } from '@/components/states/StateViews';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
-    Pressable, ActivityIndicator, TextInput, Image,
+    Pressable, ActivityIndicator, TextInput,
 } from 'react-native';
-import { Search, Music } from 'lucide-react-native';
+import { Search, Plus, Music2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 import { useTheme } from '@/hooks/useTheme';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useReleases } from '@/hooks/useReleases';
+import { ReleaseRow } from '@/components/dashboard/ReleaseRow';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-type StatusFilter = 'All' | 'Live' | 'Repair' | 'Takedown';
-
-const STATUS_ACCENT: Record<StatusFilter, string> = {
-    All:      '#9333ea',
-    Live:     '#22c55e',
-    Repair:   '#f59e0b',
-    Takedown: '#ef4444',
-};
+type StatusFilter = string;
 
 // ─── component ────────────────────────────────────────────────────────────────
 
@@ -28,7 +23,7 @@ export const Releases = () => {
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
-    const { releases, loading } = useReleases();
+    const { releases, loading, error, refetch } = useReleases();
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
 
@@ -45,7 +40,7 @@ export const Releases = () => {
         });
     }, [releases, searchQuery, statusFilter]);
 
-    const FILTERS: StatusFilter[] = ['All', 'Live', 'Repair', 'Takedown'];
+    const FILTERS = ['All', ...new Set(releases.map(r => r.status || 'Draft'))];
 
     return (
         <View style={s.screen}>
@@ -54,6 +49,10 @@ export const Releases = () => {
 
             <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
 
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ color: colors.foreground, fontSize: 32, fontWeight: '700', letterSpacing: -1 }}>Your music</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel="New release" onPress={() => router.push('/app/upload')} style={{ backgroundColor: colors.primary, width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}><Plus size={20} color={colors.onPrimary} /></Pressable>
+                </View>
                 {/* Search */}
                 <View style={s.searchWrap}>
                     <Search size={16} color={colors.mutedForeground} style={s.searchIcon} />
@@ -70,17 +69,16 @@ export const Releases = () => {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroll}>
                     {FILTERS.map((filter) => {
                         const isActive = statusFilter === filter;
-                        const accent = STATUS_ACCENT[filter];
                         return (
                             <Pressable
                                 key={filter}
                                 style={[
                                     s.filterChip,
-                                    isActive && { backgroundColor: accent, borderColor: accent },
+                                    isActive && { backgroundColor: colors.secondary, borderColor: colors.border },
                                 ]}
                                 onPress={() => setStatusFilter(filter)}
                             >
-                                <Text style={[s.filterChipText, isActive && { color: '#fff' }]}>
+                                <Text style={[s.filterChipText, isActive && { color: colors.primary }]}>
                                     {filter === 'All'
                                         ? 'All'
                                         : `${filter} (${getStatusCount(filter)})`}
@@ -94,59 +92,17 @@ export const Releases = () => {
                 <Text style={s.sectionTitle}>Your Releases</Text>
 
                 {/* Grid */}
-                {loading ? (
-                    <View style={s.centred}>
-                        <ActivityIndicator color={colors.primaryGlow} size="large" />
-                    </View>
+                {loading && !releases.length ? (
+                    <ListSkeleton rows={5} />
+                ) : error && !releases.length ? (
+                    <ErrorState error={error} title="Couldn’t load your releases" onRetry={refetch} />
+                ) : releases.length === 0 ? (
+                    <EmptyState icon={Music2} title="No releases yet" body="Upload your first single, EP or album and we’ll send it to 150+ stores." action={{ label: 'Create a release', to: '/app/upload' }} />
                 ) : filtered.length === 0 ? (
-                    <View style={s.centred}>
-                        <Text style={s.emptyText}>No releases found</Text>
-                    </View>
+                    <NoResults what="releases" query={searchQuery.trim() || undefined} onClear={() => { setSearchQuery(''); setStatusFilter('All'); }} />
                 ) : (
                     <View style={s.grid}>
-                        {filtered.map((release) => {
-                            const statusAccent = STATUS_ACCENT[release.status as StatusFilter] ?? '#9333ea';
-                            return (
-                                <Pressable
-                                    key={release.id}
-                                    style={s.releaseCard}
-                                    onPress={() => router.push(`/app/releases/${release.id}` as any)}
-                                >
-                                    {/* Cover art */}
-                                    <View style={s.coverWrap}>
-                                        {release.coverArtUrl ? (
-                                            <Image
-                                                source={{ uri: release.coverArtUrl }}
-                                                style={s.coverArt}
-                                                resizeMode="cover"
-                                            />
-                                        ) : (
-                                            <View style={s.coverPlaceholder}>
-                                                <Music size={28} color={colors.mutedForeground} />
-                                            </View>
-                                        )}
-                                        {/* Status badge */}
-                                        <View style={[s.statusBadge, { backgroundColor: statusAccent }]}>
-                                            <Text style={s.statusBadgeText}>{release.status}</Text>
-                                        </View>
-                                    </View>
-
-                                    {/* Info */}
-                                    <View style={s.releaseInfo}>
-                                        <Text style={s.releaseTitle} numberOfLines={1}>{release.title}</Text>
-                                        <Text style={s.releaseType} numberOfLines={1}>
-                                            {release.releaseType?.toUpperCase()}
-                                        </Text>
-                                        <Text style={s.releaseMeta}>
-                                            {release.releaseDate
-                                                ? new Date(release.releaseDate).getFullYear()
-                                                : '—'}{' '}
-                                            • {release.genre ?? '—'}
-                                        </Text>
-                                    </View>
-                                </Pressable>
-                            );
-                        })}
+                        {filtered.map(release => <ReleaseRow key={release.id} release={release} />)}
                     </View>
                 )}
 
@@ -162,7 +118,7 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     StyleSheet.create({
         screen: { flex: 1, backgroundColor: colors.background },
         scroll: { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, gap: 14, paddingTop: 4 },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, gap: 14, paddingTop: 4 },
 
         // Search
         searchWrap: {
@@ -177,24 +133,24 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         // Filters
         filterScroll: { flexGrow: 0 },
         filterChip: {
-            paddingHorizontal: 14, paddingVertical: 7,
-            borderRadius: 20, borderWidth: 1, borderColor: colors.border,
+            paddingHorizontal: 14, paddingVertical: 13,
+            borderRadius: 12, borderWidth: 1, borderColor: colors.border,
             marginRight: 6,
             backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
         },
         filterChipText: { fontSize: 12, fontWeight: '600', color: colors.foreground },
 
-        sectionTitle: { fontSize: 18, fontWeight: '800', color: colors.foreground },
+        sectionTitle: { fontSize: 18, fontWeight: '600', color: colors.foreground },
 
         centred: { paddingVertical: 48, alignItems: 'center' },
         emptyText: { fontSize: 13, color: colors.mutedForeground },
 
         // Grid
-        grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+        grid: { gap: 0 },
         releaseCard: {
             width: '47.5%',
             backgroundColor: colors.card,
-            borderRadius: 16, borderWidth: 1, borderColor: colors.border,
+            borderRadius: 10, borderWidth: 1, borderColor: colors.border,
             overflow: 'hidden',
         },
 

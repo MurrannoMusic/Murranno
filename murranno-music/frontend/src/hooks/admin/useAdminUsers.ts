@@ -13,7 +13,7 @@ interface UseAdminUsersParams {
 export function useAdminUsers({ page, search, tierFilter, statusFilter }: UseAdminUsersParams) {
     const queryClient = useQueryClient();
 
-    const { data, isLoading } = useQuery({
+    const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['admin-users', page, search, tierFilter, statusFilter],
         queryFn: async () => {
             const payload: any = {
@@ -56,6 +56,8 @@ export function useAdminUsers({ page, search, tierFilter, statusFilter }: UseAdm
         total: data?.total || 0,
         totalPages: data?.totalPages || 0,
         isLoading,
+        error,
+        refetch,
         updateRoleMutation,
     };
 }

@@ -1,15 +1,15 @@
 import audiomackLogo from "@/assets/platforms/audiomack.svg";
 import tidalLogo from "@/assets/platforms/tidal.svg";
-import wynkLogo from "@/assets/platforms/wynk.svg";
+import wynkLogo from "@/assets/platforms/wynk.png";
 import soundcloudLogo from "@/assets/platforms/soundcloud.svg";
 import pandoraLogo from "@/assets/platforms/pandora2.svg";
 import napsterLogo from "@/assets/platforms/napster.svg";
 import spotifyLogo from "@/assets/platforms/spotify.svg";
 import appleMusicLogo from "@/assets/platforms/apple-music.svg";
 import youtubeMusicLogo from "@/assets/platforms/youtube-music.svg";
-import deezerLogo from "@/assets/platforms/deezer.svg";
-import amazonMusicLogo from "@/assets/platforms/amazon-music.svg";
-import boomplayLogo from "@/assets/platforms/boomplay.svg";
+import deezerLogo from "@/assets/platforms/deezer.png";
+import amazonMusicLogo from "@/assets/platforms/amazon-music.png";
+import boomplayLogo from "@/assets/platforms/boomplay.png";
 
 export const PlatformLogos = () => {
   const platforms = [
@@ -52,8 +52,8 @@ export const PlatformLogos = () => {
               <img 
                 src={platform.logo} 
                 alt={platform.name}
-                className="h-10 w-auto object-contain brightness-0 invert"
-                style={{ filter: 'brightness(0) invert(1)' }}
+                className="h-10 w-auto object-contain"
+                style={{ filter: [wynkLogo, deezerLogo, amazonMusicLogo, boomplayLogo].includes(platform.logo) ? 'none' : 'brightness(0) invert(1)' }}
               />
             </div>
           ))}

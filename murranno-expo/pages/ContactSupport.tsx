@@ -1,15 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
-    Pressable, TextInput, ActivityIndicator, Alert,
+    Pressable, TextInput, ActivityIndicator,
 } from 'react-native';
 import {
-    ChevronRight, Mail, MessageSquare, Clock,
+    ChevronRight, Mail, MessageSquare,
     ChevronDown, Send, Inbox,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 import { useTheme } from '@/hooks/useTheme';
+import { FormError, FormField } from '@/components/forms/FormField';
+import { EmptyState, ErrorState, ListSkeleton, SuccessState, friendlyError } from '@/components/states/StateViews';
+import { email as emailRule, minLength, required, validate } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import { AppHeader } from '@/components/layout/AppHeader';
 
@@ -36,6 +39,9 @@ export const ContactSupport = () => {
     const [activeTab, setActiveTab] = useState<'request' | 'tickets'>('request');
     const [showCatPicker, setShowCatPicker] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [errors, setErrors] = useState<Partial<Record<'name' | 'email' | 'category' | 'subject' | 'message' | 'form', string>>>({});
+    const [submitted, setSubmitted] = useState(false);
+    const [ticketsRevision, setTicketsRevision] = useState(0);
 
     const [form, setForm] = useState({
         name:     '',
@@ -45,34 +51,40 @@ export const ContactSupport = () => {
         message:  '',
     });
 
-    const set = (key: keyof typeof form) => (val: string) =>
+    const set = (key: keyof typeof form) => (val: string) => {
         setForm((prev) => ({ ...prev, [key]: val }));
+        setErrors({});
+    };
 
     const handleSubmit = async () => {
-        if (!form.name || !form.email || !form.category || !form.subject || !form.message) {
-            Alert.alert('Incomplete', 'Please fill in all fields.');
-            return;
-        }
+        const found = validate(form, {
+            name: [required('your name')],
+            email: [emailRule],
+            category: [(v) => (v ? '' : 'Choose a category')],
+            subject: [required('a subject'), minLength(4, 'Subject')],
+            message: [required('your message'), minLength(20, 'Message')],
+        });
+        setErrors(found);
+        if (Object.keys(found).length) return;
         setSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('Please sign in again.');
             const { error } = await supabase.from('support_tickets').insert({
                 user_id:  user?.id ?? null,
-                name:     form.name,
-                email:    form.email,
+                name:     form.name.trim(),
+                email:    form.email.trim(),
                 category: form.category,
-                subject:  form.subject,
-                message:  form.message,
+                subject:  form.subject.trim(),
+                message:  form.message.trim(),
                 status:   'open',
             });
             if (error) throw error;
-            Alert.alert('Request Submitted', "We'll get back to you within 24 hours.", [
-                { text: 'OK', onPress: () => setForm({ name: '', email: '', category: '', subject: '', message: '' }) },
-            ]);
-        } catch {
-            // Fallback: table may not exist yet — show success anyway
-            Alert.alert('Request Submitted', "We'll get back to you within 24 hours.");
             setForm({ name: '', email: '', category: '', subject: '', message: '' });
+            setTicketsRevision((n) => n + 1);
+            setSubmitted(true);
+        } catch (error: any) {
+            setErrors({ form: `${friendlyError(error).message} Your message has been kept.` });
         } finally {
             setSubmitting(false);
         }
@@ -92,7 +104,7 @@ export const ContactSupport = () => {
                 </Pressable>
 
                 <Text style={s.title}>Contact Support</Text>
-                <Text style={s.subtitle}>Have a question or need help? We're here to assist you.</Text>
+                <Text style={s.subtitle}>Have a question or need help? We&apos;re here to assist you.</Text>
 
                 {/* Tab toggle */}
                 <View style={s.tabToggle}>
@@ -135,32 +147,28 @@ export const ContactSupport = () => {
 
                         {/* Form */}
                         <Text style={s.formTitle}>Submit a Support Request</Text>
-                        <Text style={s.formSub}>Fill out the form below and we'll get back to you as soon as possible</Text>
+                        <Text style={s.formSub}>Fill out the form below and we&apos;ll get back to you as soon as possible</Text>
 
+                        {submitted ? (
+                            <View style={s.formCard}>
+                                <SuccessState
+                                    title="Request sent"
+                                    body="Thanks for reaching out. Our team replies within 24 hours, by email and under My Tickets."
+                                    action={{ label: 'View my tickets', onPress: () => { setSubmitted(false); setActiveTab('tickets'); } }}
+                                    secondary={{ label: 'Send another', onPress: () => setSubmitted(false) }}
+                                />
+                            </View>
+                        ) : (
                         <View style={s.formCard}>
                             {/* Name */}
-                            <Text style={s.label}>Name</Text>
-                            <TextInput
-                                style={s.input}
-                                placeholderTextColor={colors.mutedForeground}
-                                value={form.name}
-                                onChangeText={set('name')}
-                            />
+                            <FormField label="Name" value={form.name} onChangeText={set('name')} autoComplete="name" textContentType="name" error={errors.name} />
 
                             {/* Email */}
-                            <Text style={[s.label, { marginTop: 12 }]}>Email</Text>
-                            <TextInput
-                                style={s.input}
-                                placeholderTextColor={colors.mutedForeground}
-                                value={form.email}
-                                onChangeText={set('email')}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                            />
+                            <FormField containerStyle={{ marginTop: 12 }} label="Email" value={form.email} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" autoComplete="email" error={errors.email} />
 
                             {/* Category */}
                             <Text style={[s.label, { marginTop: 12 }]}>Category</Text>
-                            <Pressable style={s.select} onPress={() => setShowCatPicker((p) => !p)}>
+                            <Pressable accessibilityRole="button" accessibilityLabel={form.category ? `Category: ${form.category}. Change` : 'Select a category'} style={[s.select, !!errors.category && { borderColor: colors.destructive }]} onPress={() => setShowCatPicker((p) => !p)}>
                                 <Text style={form.category ? s.selectValue : s.selectPlaceholder}>
                                     {form.category || 'Select a category'}
                                 </Text>
@@ -181,27 +189,26 @@ export const ContactSupport = () => {
                                     ))}
                                 </View>
                             )}
+                            {!!errors.category && <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 12, marginTop: 6 }}>{errors.category}</Text>}
 
                             {/* Subject */}
-                            <Text style={[s.label, { marginTop: 12 }]}>Subject</Text>
-                            <TextInput
-                                style={s.input}
-                                placeholderTextColor={colors.mutedForeground}
-                                value={form.subject}
-                                onChangeText={set('subject')}
-                            />
+                            <FormField containerStyle={{ marginTop: 12 }} label="Subject" value={form.subject} onChangeText={set('subject')} placeholder="e.g. My release isn’t on Spotify yet" error={errors.subject} />
 
                             {/* Message */}
-                            <Text style={[s.label, { marginTop: 12 }]}>Message</Text>
-                            <TextInput
-                                style={[s.input, s.textarea]}
-                                placeholderTextColor={colors.mutedForeground}
+                            <FormField
+                                containerStyle={{ marginTop: 12 }}
+                                label="Message"
                                 value={form.message}
                                 onChangeText={set('message')}
+                                placeholder="Tell us what happened, and include the release or transaction if it’s related."
                                 multiline
                                 numberOfLines={5}
                                 textAlignVertical="top"
+                                style={{ minHeight: 110 }}
+                                error={errors.message}
                             />
+
+                            <View style={{ marginTop: 12 }}><FormError message={errors.form} /></View>
 
                             {/* Submit */}
                             <Pressable
@@ -210,17 +217,18 @@ export const ContactSupport = () => {
                                 disabled={submitting}
                             >
                                 {submitting
-                                    ? <ActivityIndicator color="#fff" size="small" />
+                                    ? <ActivityIndicator color={colors.onPrimary} size="small" />
                                     : <>
-                                        <Send size={15} color="#fff" />
+                                        <Send size={15} color={colors.onPrimary} />
                                         <Text style={s.submitBtnText}>Submit Request</Text>
                                     </>
                                 }
                             </Pressable>
                         </View>
+                        )}
                     </>
                 ) : (
-                    <TicketsList colors={colors} isDark={isDark} s={s} />
+                    <TicketsList key={ticketsRevision} colors={colors} isDark={isDark} s={s} onNew={() => setActiveTab('request')} />
                 )}
 
                 <View style={{ height: 40 }} />
@@ -230,12 +238,15 @@ export const ContactSupport = () => {
 };
 
 // ─── Tickets List ─────────────────────────────────────────────────────────────
-const TicketsList = ({ colors, isDark, s }: { colors: any; isDark: boolean; s: any }) => {
+const TicketsList = ({ colors, isDark, s, onNew }: { colors: any; isDark: boolean; s: any; onNew?: () => void }) => {
     const [tickets, setTickets] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState('');
+    const [revision, setRevision] = React.useState(0);
 
     React.useEffect(() => {
         (async () => {
+            setLoading(true); setError('');
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) return;
@@ -244,25 +255,21 @@ const TicketsList = ({ colors, isDark, s }: { colors: any; isDark: boolean; s: a
                     .select('*')
                     .eq('user_id', user.id)
                     .order('created_at', { ascending: false });
-                if (!error) setTickets(data || []);
+                if (error) throw error;
+                setTickets(data || []);
             } catch (err) {
-                console.error(err);
+                setError(err instanceof Error ? err.message : 'Tickets could not be loaded.');
             } finally {
                 setLoading(false);
             }
         })();
-    }, []);
+    }, [revision]);
 
-    if (loading) return <ActivityIndicator color={colors.primaryGlow} style={{ marginTop: 40 }} />;
+    if (loading) return <ListSkeleton rows={3} media={false} />;
 
+    if (error) return <ErrorState error={error} title="Couldn’t load your tickets" onRetry={() => setRevision(n => n + 1)} />;
     if (tickets.length === 0) {
-        return (
-            <View style={s.emptyTickets}>
-                <Inbox size={40} color={colors.mutedForeground} />
-                <Text style={s.emptyTitle}>No tickets yet</Text>
-                <Text style={s.emptySub}>Submit a support request and it will appear here</Text>
-            </View>
-        );
+        return <EmptyState icon={Inbox} title="No tickets yet" body="When you send us a request it shows up here with its status and our replies." action={onNew ? { label: 'Contact support', onPress: onNew } : undefined} />;
     }
 
     return (
@@ -300,12 +307,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     return StyleSheet.create({
         screen:       { flex: 1, backgroundColor: colors.background },
         scroll:       { flex: 1 },
-        scrollContent:{ paddingHorizontal: 16, paddingTop: 8, gap: 14 },
+        scrollContent:{ width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 8, gap: 14 },
 
         back: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10 },
         backText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
 
-        title:    { fontSize: 24, fontWeight: '800', color: colors.foreground },
+        title:    { fontSize: 24, fontWeight: '600', color: colors.foreground },
         subtitle: { fontSize: 14, color: colors.mutedForeground, lineHeight: 22 },
 
         tabToggle: {
@@ -314,7 +321,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             borderRadius: 14, padding: 3,
         },
         tabBtn:          { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
-        tabBtnActive:    { backgroundColor: isDark ? '#1e2a3a' : '#fff' },
+        tabBtnActive:    { backgroundColor: colors.secondary },
         tabBtnText:      { fontSize: 13, fontWeight: '600', color: colors.mutedForeground },
         tabBtnTextActive:{ color: colors.foreground },
 
@@ -331,7 +338,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         formSub:   { fontSize: 13, color: colors.mutedForeground, lineHeight: 20, marginTop: -8 },
 
         formCard: {
-            backgroundColor: colors.card, borderRadius: 16,
+            backgroundColor: colors.card, borderRadius: 10,
             borderWidth: 1, borderColor: colors.border, padding: 16,
         },
         label: { fontSize: 13, fontWeight: '600', color: colors.foreground, marginBottom: 6 },
@@ -352,7 +359,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         selectPlaceholder:{ fontSize: 14, color: colors.mutedForeground },
 
         picker: {
-            backgroundColor: isDark ? '#101d36' : colors.card,
+            backgroundColor: colors.card,
             borderRadius: 10, borderWidth: 1, borderColor: colors.border,
             overflow: 'hidden', marginTop: 4,
         },
@@ -365,7 +372,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             backgroundColor: colors.primaryGlow, borderRadius: 12,
             paddingVertical: 14, marginTop: 16,
         },
-        submitBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+        submitBtnText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
 
         emptyTickets: { alignItems: 'center', paddingVertical: 60, gap: 12 },
         emptyTitle:   { fontSize: 16, fontWeight: '600', color: colors.foreground },

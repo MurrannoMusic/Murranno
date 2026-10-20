@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
+
+type ReleaseRow = Database['public']['Tables']['releases']['Row'];
 import { AdminRelease } from '@/types/admin';
 import { toast } from 'sonner';
 
@@ -20,7 +23,7 @@ export function useAdminReleases({
 }: UseAdminReleasesParams) {
     const queryClient = useQueryClient();
 
-    const { data, isLoading } = useQuery({
+    const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['admin-releases', page, search, statusFilter, genreFilter, releaseTypeFilter],
         queryFn: async () => {
             let query = supabase
@@ -34,7 +37,7 @@ export function useAdminReleases({
             }
 
             if (statusFilter && statusFilter !== 'all') {
-                query = query.eq('status', statusFilter);
+                query = query.eq('status', statusFilter as ReleaseRow['status']);
             }
 
             if (genreFilter && genreFilter !== 'all') {
@@ -94,6 +97,8 @@ export function useAdminReleases({
             rejected: data?.rejected || 0,
         },
         isLoading,
+        error,
+        refetch,
         moderateRelease,
     };
 }

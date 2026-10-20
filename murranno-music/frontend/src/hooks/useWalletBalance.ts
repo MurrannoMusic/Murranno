@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
 
 export interface WalletBalance {
   id: string;
@@ -16,11 +15,13 @@ export interface WalletBalance {
 export const useWalletBalance = () => {
   const [balance, setBalance] = useState<WalletBalance | null>(null);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+  const [error, setError] = useState<unknown>(null);
 
-  const fetchBalance = async () => {
+  // `silent` background refreshes keep showing the current balance instead of a loading state.
+  const fetchBalance = async (silent = false) => {
     try {
-      setLoading(true);
+      setError(null);
+      if (!silent) setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -46,12 +47,8 @@ export const useWalletBalance = () => {
       console.log('Wallet balance fetched:', data.balance);
       setBalance(data.balance);
     } catch (error: any) {
+      setError(error);
       console.error('Error in fetchBalance:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to fetch wallet balance',
-        variant: 'destructive',
-      });
       setBalance(null);
     } finally {
       setLoading(false);
@@ -60,30 +57,15 @@ export const useWalletBalance = () => {
 
   useEffect(() => {
     fetchBalance();
-
-    const channel = supabase
-      .channel('wallet_balance_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'wallet_balance',
-        },
-        () => {
-          fetchBalance();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // The API has no realtime channels: poll for balance changes instead.
+    const timer = setInterval(() => fetchBalance(true), 30_000);
+    return () => clearInterval(timer);
   }, []);
 
   return {
+    error,
     balance,
     loading,
-    refetch: fetchBalance,
+    refetch: () => fetchBalance(),
   };
 };

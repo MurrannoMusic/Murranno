@@ -1,278 +1,48 @@
-import React, { useState, useMemo, useRef } from 'react';
-import {
-    View, Text, ScrollView, StyleSheet, StatusBar,
-    Pressable, ActivityIndicator, Dimensions,
-} from 'react-native';
-import { TrendingUp, TrendingDown } from 'lucide-react-native';
-
+import React, { useState } from 'react';
+import { EmptyState, ErrorState, ListSkeleton, Skeleton } from '@/components/states/StateViews';
+import { View, Text, ScrollView, StyleSheet, StatusBar, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useStreamAnalytics } from '@/hooks/useStreamAnalytics';
+import { useAnalyticsData } from '@/hooks/useAnalyticsData';
+import { StreamChart } from '@/components/dashboard/StreamChart';
+import { TopTracksCard } from '@/components/dashboard/TopTracksCard';
 
-// ─── types ────────────────────────────────────────────────────────────────────
-
-type TabId = 'streams' | 'tracks' | 'playlists' | 'stores' | 'audience';
-type PeriodId = 'week' | 'month' | '90days' | 'year';
-
-const TABS: { id: TabId; label: string }[] = [
-    { id: 'streams',  label: 'Streams'  },
-    { id: 'tracks',   label: 'Tracks'   },
-    { id: 'playlists',label: 'Playlists'},
-    { id: 'stores',   label: 'Stores'   },
-    { id: 'audience', label: 'Audience' },
-];
-
-const PERIODS: { id: PeriodId; label: string; days: number }[] = [
-    { id: 'week',   label: 'Week',    days: 7   },
-    { id: 'month',  label: 'Month',   days: 30  },
-    { id: '90days', label: '90 Days', days: 90  },
-    { id: 'year',   label: 'Year',    days: 365 },
-];
-
-// ─── Bar Chart ────────────────────────────────────────────────────────────────
-
-const { width: SCREEN_W } = Dimensions.get('window');
-const CHART_H = 160;
-
-interface BarChartProps {
-    data: { label: string; streams: number; date?: string }[];
-    accentColor: string;
-    colors: any;
-}
-
-const BarChart = ({ data, accentColor, colors }: BarChartProps) => {
-    if (data.length === 0) {
-        return (
-            <View style={{ height: CHART_H, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ fontSize: 12, color: colors.mutedForeground }}>No data for this period</Text>
-            </View>
-        );
-    }
-
-    const maxVal = Math.max(...data.map((d) => d.streams), 1);
-    // Show at most 14 bars; if more, sample evenly
-    const displayData = data.length <= 14 ? data : data.filter((_, i) => i % Math.ceil(data.length / 14) === 0);
-    const barWidth = Math.floor((SCREEN_W - 64) / displayData.length) - 3;
-
-    return (
-        <View style={{ height: CHART_H + 24 }}>
-            {/* Grid lines */}
-            {[0.25, 0.5, 0.75, 1].map((frac) => (
-                <View
-                    key={frac}
-                    style={{
-                        position: 'absolute',
-                        left: 0,
-                        right: 0,
-                        top: CHART_H * (1 - frac),
-                        height: 1,
-                        backgroundColor: colors.border,
-                        opacity: 0.5,
-                    }}
-                />
-            ))}
-
-            {/* Bars row */}
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H, gap: 3 }}>
-                {displayData.map((d, i) => {
-                    const heightFrac = maxVal > 0 ? d.streams / maxVal : 0;
-                    const barH = Math.max(heightFrac * CHART_H, 4);
-                    return (
-                        <View
-                            key={`${d.date ?? ''}-${i}`}
-                            style={{
-                                width: barWidth,
-                                height: barH,
-                                backgroundColor: accentColor,
-                                borderRadius: 4,
-                                opacity: 0.85,
-                            }}
-                        />
-                    );
-                })}
-            </View>
-
-            {/* X-axis labels: show first, middle, last */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
-                <Text style={{ fontSize: 10, color: colors.mutedForeground }}>
-                    {displayData[0]?.label ?? ''}
-                </Text>
-                {displayData.length > 2 && (
-                    <Text style={{ fontSize: 10, color: colors.mutedForeground }}>
-                        {displayData[Math.floor(displayData.length / 2)]?.label ?? ''}
-                    </Text>
-                )}
-                <Text style={{ fontSize: 10, color: colors.mutedForeground }}>
-                    {displayData[displayData.length - 1]?.label ?? ''}
-                </Text>
-            </View>
-        </View>
-    );
-};
-
-// ─── component ────────────────────────────────────────────────────────────────
-
+const TABS = ['Streams', 'Tracks', 'Stores', 'Audience'] as const;
+const PERIODS = [{ label: '7 days', days: 7 }, { label: '30 days', days: 30 }, { label: '90 days', days: 90 }, { label: 'Year', days: 365 }];
 export const AnalyticsScreen = () => {
     const { colors, isDark } = useTheme();
-    const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-
-    const [activeTab, setActiveTab]     = useState<TabId>('streams');
-    const [activePeriod, setActivePeriod] = useState<PeriodId>('week');
-
-    const periodDays = PERIODS.find((p) => p.id === activePeriod)?.days ?? 7;
-    const { chartData, stats, loading } = useStreamAnalytics(periodDays);
-
-    const tabLabel = TABS.find((t) => t.id === activeTab)?.label ?? 'Streams';
-    const isPositive = stats.percentageChange >= 0;
-
-    return (
-        <View style={s.screen}>
-            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-            <AppHeader />
-
-            {/* Tabs */}
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={s.tabScroll}
-                contentContainerStyle={s.tabScrollContent}
-            >
-                {TABS.map((tab) => (
-                    <Pressable
-                        key={tab.id}
-                        style={[s.tab, activeTab === tab.id && s.tabActive]}
-                        onPress={() => setActiveTab(tab.id)}
-                    >
-                        <Text style={[s.tabText, activeTab === tab.id && s.tabTextActive]}>
-                            {tab.label}
-                        </Text>
-                    </Pressable>
-                ))}
+    const [tab, setTab] = useState<typeof TABS[number]>('Streams');
+    const [days, setDays] = useState(30);
+    const { chartData, stats, loading, error, refetch } = useStreamAnalytics(days);
+    const { data, loading: summaryLoading, error: summaryError, refetch: refetchSummary } = useAnalyticsData(days);
+    const change = stats.percentageChange;
+    return <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <AppHeader />
+        <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+            <Text style={[s.title, { color: colors.foreground }]}>Analytics</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 24 }} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                {TABS.map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} aria-selected={tab === value} onPress={() => setTab(value)} style={[s.tab, { borderBottomColor: tab === value ? colors.primary : 'transparent' }]}><Text style={{ color: tab === value ? colors.primary : colors.mutedForeground, fontSize: 14, fontWeight: '500' }}>{value}</Text></Pressable>)}
             </ScrollView>
-
-            <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-
-                {/* Section title */}
-                <View style={s.titleRow}>
-                    <Text style={s.sectionTitle}>{tabLabel}</Text>
+            <View style={[s.periods, { backgroundColor: colors.secondary }]}>
+                {PERIODS.map(period => <Pressable key={period.days} accessibilityRole="button" accessibilityState={{ selected: days === period.days }} aria-pressed={days === period.days} onPress={() => setDays(period.days)} style={[s.period, days === period.days && { backgroundColor: colors.background }]}><Text style={{ color: days === period.days ? colors.foreground : colors.mutedForeground, fontSize: 12, fontWeight: '600' }}>{period.label}</Text></Pressable>)}
+            </View>
+            <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{loading ? 'Loading reporting period…' : stats.currentDateRange}</Text>
+            {error ? <ErrorState error={error} title="Couldn’t load your analytics" onRetry={refetch} /> : tab === 'Streams' ? <>
+                <View style={{ gap: 8 }}>
+                    <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>Total reported streams</Text>
+                    <Text style={[s.total, { color: colors.foreground }]}>{loading ? '' : stats.currentTotal.toLocaleString()}</Text>{loading && <Skeleton style={{ height: 44, width: 160 }} />}
+                    {!loading && <Text style={{ color: change === null ? colors.mutedForeground : change >= 0 ? colors.success : colors.destructive, fontSize: 13 }}>{change === null ? 'No previous-period comparison available' : `${change >= 0 ? '↗ +' : '↘ '}${change}% vs previous ${days} days`}</Text>}
                 </View>
+                <View><Text style={[s.section, { color: colors.foreground }]}>Daily streams</Text><StreamChart data={chartData} loading={loading} /><Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 12 }}>Reported days only. Reporting times vary by store.</Text></View>
+                <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 24 }}><TopTracksCard period={days} /></View>
+            </> : tab === 'Tracks' ? <TopTracksCard period={days} /> : tab === 'Stores' || tab === 'Audience' ? summaryError ? <ErrorState error={summaryError} title="Couldn’t load your reports" onRetry={refetchSummary} /> : <View style={s.detail}>
+                <Text style={[s.section, { color: colors.foreground }]}>{tab === 'Stores' ? 'Streams by store' : 'Streams by country'}</Text>
+                {summaryLoading ? <ListSkeleton rows={4} media={false} /> : Object.entries(tab === 'Stores' ? data?.streamsByPlatform || {} : data?.streamsByCountry || {}).length ? Object.entries(tab === 'Stores' ? data?.streamsByPlatform || {} : data?.streamsByCountry || {}).sort(([,a],[,b])=>b-a).map(([name,streams]) => <View key={name} style={{gap:8,paddingVertical:8}}><View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:colors.foreground}}>{name}</Text><Text style={{color:colors.mutedForeground}}>{streams.toLocaleString()}</Text></View><View style={{height:4,backgroundColor:colors.border,borderRadius:2}}><View style={{height:4,width:`${Math.min(100,streams / Math.max(1,data?.totalStreams || 0)*100)}%`,backgroundColor:colors.primary,borderRadius:2}}/></View></View>) : <EmptyState title="No reports for this period" body="Try a longer period, or check back once stores send new reports." />}
 
-                {/* Period Pills */}
-                <View style={s.periodRow}>
-                    {PERIODS.map((p) => (
-                        <Pressable
-                            key={p.id}
-                            style={[s.periodPill, activePeriod === p.id && s.periodPillActive]}
-                            onPress={() => setActivePeriod(p.id)}
-                        >
-                            <Text style={[s.periodPillText, activePeriod === p.id && s.periodPillTextActive]}>
-                                {p.label}
-                            </Text>
-                        </Pressable>
-                    ))}
-                </View>
-
-                {/* Stats Card */}
-                <View style={s.statsCard}>
-                    {loading ? (
-                        <View style={{ padding: 24, alignItems: 'center' }}>
-                            <ActivityIndicator color={colors.primaryGlow} size="large" />
-                        </View>
-                    ) : (
-                        <>
-                            <Text style={s.statsLabel}>{tabLabel}</Text>
-                            <Text style={s.statsTotal}>{stats.currentTotal.toLocaleString()}</Text>
-                            <Text style={s.statsDateRange}>{stats.currentDateRange}</Text>
-
-                            <View style={s.statsChangeRow}>
-                                <View style={[
-                                    s.changeBadge,
-                                    { backgroundColor: isPositive ? `${colors.success}18` : `${colors.destructive}18` },
-                                ]}>
-                                    {isPositive
-                                        ? <TrendingUp size={12} color={colors.success} />
-                                        : <TrendingDown size={12} color={colors.destructive} />
-                                    }
-                                    <Text style={[s.changeBadgeText, { color: isPositive ? colors.success : colors.destructive }]}>
-                                        {isPositive ? '+' : ''}{stats.percentageChange}%
-                                    </Text>
-                                </View>
-                                {stats.currentTotal === 0 && (
-                                    <Text style={s.statsNoData}>No streams in this period</Text>
-                                )}
-                            </View>
-                        </>
-                    )}
-                </View>
-
-                {/* Chart Card */}
-                {!loading && (
-                    <View style={s.chartCard}>
-                        <Text style={s.chartTitle}>Daily {tabLabel}</Text>
-                        <BarChart
-                            data={chartData.map((d) => ({ label: d.label, streams: d.streams, date: d.date }))}
-                            accentColor={colors.primaryGlow}
-                            colors={colors}
-                        />
-                    </View>
-                )}
-
-                <View style={{ height: 40 }} />
-            </ScrollView>
-        </View>
-    );
+            </View> : <View style={s.detail}><Text style={[s.section, { color: colors.foreground }]}>Playlist reports</Text><Text style={{ color: colors.mutedForeground, lineHeight: 22 }}>Playlist placement data is not available yet.</Text></View>}
+        </ScrollView>
+    </View>;
 };
-
-// ─── styles ───────────────────────────────────────────────────────────────────
-
-const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boolean) =>
-    StyleSheet.create({
-        screen: { flex: 1, backgroundColor: colors.background },
-        scroll: { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, gap: 14, paddingTop: 8 },
-
-        // Horizontal tabs
-        tabScroll: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: colors.border },
-        tabScrollContent: { paddingHorizontal: 16, gap: 4 },
-        tab: {
-            paddingHorizontal: 16, paddingVertical: 10,
-            borderBottomWidth: 2, borderBottomColor: 'transparent',
-        },
-        tabActive: { borderBottomColor: colors.primaryGlow },
-        tabText: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground },
-        tabTextActive: { color: colors.primaryGlow },
-
-        titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-        sectionTitle: { fontSize: 24, fontWeight: '800', color: colors.foreground },
-
-        // Period pills
-        periodRow: { flexDirection: 'row', gap: 8 },
-        periodPill: {
-            paddingHorizontal: 16, paddingVertical: 7,
-            borderRadius: 20, borderWidth: 1, borderColor: colors.border,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-        },
-        periodPillActive: { backgroundColor: colors.primaryGlow, borderColor: colors.primaryGlow },
-        periodPillText: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground },
-        periodPillTextActive: { color: '#fff' },
-
-        // Stats card
-        statsCard: {
-            borderRadius: 20, padding: 20,
-            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, gap: 6,
-        },
-        statsLabel:     { fontSize: 13, color: colors.mutedForeground },
-        statsTotal:     { fontSize: 40, fontWeight: '800', color: colors.primaryGlow, letterSpacing: -1 },
-        statsDateRange: { fontSize: 12, color: colors.mutedForeground },
-        statsChangeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-        changeBadge:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-        changeBadgeText:{ fontSize: 13, fontWeight: '700' },
-        statsNoData:    { fontSize: 12, color: colors.mutedForeground },
-
-        // Chart card
-        chartCard: {
-            borderRadius: 20, padding: 20,
-            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-        },
-        chartTitle: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground, marginBottom: 16 },
-    });
+const s = StyleSheet.create({ content: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40, gap: 24 }, title: { fontSize: 32, fontWeight: '700', letterSpacing: -1 }, tab: { paddingVertical: 14, borderBottomWidth: 2, minHeight: 48 }, periods: { flexDirection: 'row', borderRadius: 8, padding: 4 }, period: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 40, borderRadius: 6 }, total: { fontSize: 44, letterSpacing: -1.5, fontWeight: '600', fontVariant: ['tabular-nums'] }, section: { fontSize: 20, fontWeight: '600', marginBottom: 12 }, detail: { paddingVertical: 12, gap: 12 } });

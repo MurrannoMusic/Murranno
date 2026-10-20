@@ -1,54 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, Pressable, Image,
     TextInput, ScrollView, ActivityIndicator,
     Alert, Dimensions, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ChevronLeft } from 'lucide-react-native';
+import { useTheme } from '@/hooks/useTheme';
+import type { ThemeColors } from '@/constants/theme';
+import { appRedirect, signInWithProvider } from '@/lib/auth';
+import { notify, invoke } from '@/lib/api';
 import { supabase } from '@/integrations/supabase/client';
+import { FormError, FormField } from '@/components/forms/FormField';
+import { friendlyError } from '@/components/states/StateViews';
+import { email as emailRule } from '@/lib/validation';
 
 const { width: W, height: H } = Dimensions.get('window');
 
 export default function SignIn() {
     const router = useRouter();
+    const { reason } = useLocalSearchParams<{ reason?: string }>();
+    // Set after mount: the static web HTML has no query string, so rendering it directly breaks hydration.
+    const [expired, setExpired] = useState(false);
+    useEffect(() => setExpired(reason === 'expired'), [reason]);
+    const { colors } = useTheme();
+    const s = makeStyles(colors);
 
+    const [providers, setProviders] = useState({google: false, apple: false});
+    useEffect(() => { invoke('get-mobile-config').then(c => setProviders(c.providers)).catch(() => {}); }, []);
     const [email,    setEmail]    = useState('');
     const [password, setPassword] = useState('');
-    const [showPw,   setShowPw]   = useState(false);
     const [loading,  setLoading]  = useState(false);
+    const [errors,   setErrors]   = useState<{ email?: string; password?: string; form?: string }>({});
 
     const handleLogin = async () => {
-        if (!email || !password) {
-            Alert.alert('Missing fields', 'Please enter your email and password.');
-            return;
-        }
+        const found = { email: emailRule(email) || undefined, password: password ? undefined : 'Enter your password' };
+        setErrors(found);
+        if (found.email || found.password) return;
         setLoading(true);
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         setLoading(false);
         if (error) {
-            Alert.alert('Login failed', error.message);
+            const info = friendlyError(error);
+            setErrors({ form: info.kind === 'offline' || info.kind === 'server' ? info.message : /invalid|credentials|password/i.test(error.message) ? 'That email and password don’t match. Check them or reset your password.' : error.message });
         } else {
             router.replace('/app' as any);
         }
     };
 
-    const handleOAuth = (provider: 'google' | 'apple') => {
-        Alert.alert(
-            `${provider === 'google' ? 'Google' : 'Apple'} Sign-In`,
-            'OAuth sign-in requires additional native configuration. Please use email/password for now.',
-        );
+    const handleOAuth = async (provider: 'google' | 'apple') => {
+        if (loading) return;
+        setLoading(true);
+        try { if (await signInWithProvider(provider)) router.replace('/app'); }
+        catch (error: any) { notify('Sign-in unavailable', error.message); }
+        finally { setLoading(false); }
     };
 
     return (
         <View style={s.screen}>
             {/* Background image */}
-            <Image
-                source={require('../assets/images/onboarding-2.jpg')}
-                style={s.bg}
-                resizeMode="cover"
-            />
-            <View style={s.overlay} />
+            <Image source={require('@/assets/images/logo.png')} style={{ width: 160, height: 52, alignSelf: 'center', marginTop: 64 }} resizeMode="contain" />
 
             <KeyboardAvoidingView
                 style={s.flex}
@@ -62,58 +73,62 @@ export default function SignIn() {
                 >
                     {/* Back */}
                     <Pressable style={s.back} onPress={() => router.back()}>
-                        <ChevronLeft size={22} color="#fff" />
+                        <ChevronLeft size={22} color={colors.foreground} />
                     </Pressable>
 
                     {/* Card */}
                     <View style={s.card}>
-                        <Text style={s.title}>Log in to your account</Text>
+                        <Text accessibilityRole="header" style={s.title}>Log in to your account</Text>
+                        {expired && (
+                            <Text accessibilityRole="alert" style={s.notice}>Your session expired. Sign in again to continue.</Text>
+                        )}
 
                         {/* OAuth */}
                         <Text style={s.orText}>OR CONTINUE WITH</Text>
                         <View style={s.oauthRow}>
-                            <Pressable style={s.oauthBtn} onPress={() => handleOAuth('google')}>
+                            <Pressable accessibilityRole="button" disabled={loading || !providers.google} style={[s.oauthBtn, !providers.google && {opacity: 0.4}]} onPress={() => handleOAuth('google')}>
                                 <Text style={s.oauthBtnText}>G  Google</Text>
                             </Pressable>
-                            <Pressable style={s.oauthBtn} onPress={() => handleOAuth('apple')}>
+                            <Pressable accessibilityRole="button" disabled={loading || !providers.apple} style={[s.oauthBtn, !providers.apple && {opacity: 0.4}]} onPress={() => handleOAuth('apple')}>
                                 <Text style={s.oauthBtnText}> Apple</Text>
                             </Pressable>
                         </View>
 
                         {/* Fields */}
-                        <Text style={s.label}>Email</Text>
-                        <TextInput
-                            style={s.input}
-                            placeholderTextColor="rgba(255,255,255,0.35)"
+                        <FormField
+                            label="Email"
                             placeholder="your@email.com"
                             value={email}
-                            onChangeText={setEmail}
+                            onChangeText={(v) => { setEmail(v); setErrors({}); }}
                             keyboardType="email-address"
                             autoCapitalize="none"
+                            autoComplete="email"
+                            textContentType="emailAddress"
+                            error={errors.email}
                         />
 
-                        <View style={s.pwRow}>
-                            <Text style={s.label}>Password</Text>
-                            <Pressable onPress={() => router.push('/forgot-password' as any)}>
-                                <Text style={s.forgotText}>Forgot password?</Text>
-                            </Pressable>
-                        </View>
-                        <View style={s.pwWrap}>
-                            <TextInput
-                                style={[s.input, { flex: 1, borderWidth: 0, paddingVertical: 0 }]}
-                                placeholderTextColor="rgba(255,255,255,0.35)"
+                        <View style={{ gap: 6 }}>
+                            <View style={s.pwRow}>
+                                <Text style={s.label}>Password</Text>
+                                <Pressable accessibilityRole="link" hitSlop={8} onPress={() => router.push({ pathname: '/forgot-password', params: { email: email.trim() } } as any)}>
+                                    <Text style={s.forgotText}>Forgot password?</Text>
+                                </Pressable>
+                            </View>
+                            <FormField
+                                password
+                                accessibilityLabel="Password"
                                 placeholder="••••••••••"
                                 value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry={!showPw}
+                                onChangeText={(v) => { setPassword(v); setErrors({}); }}
+                                autoComplete="current-password"
+                                textContentType="password"
+                                returnKeyType="go"
+                                onSubmitEditing={handleLogin}
+                                error={errors.password}
                             />
-                            <Pressable onPress={() => setShowPw((p) => !p)} style={s.eyeBtn}>
-                                {showPw
-                                    ? <EyeOff size={18} color="rgba(255,255,255,0.4)" />
-                                    : <Eye    size={18} color="rgba(255,255,255,0.4)" />
-                                }
-                            </Pressable>
                         </View>
+
+                        <FormError message={errors.form} />
 
                         {/* Submit */}
                         <Pressable
@@ -122,13 +137,13 @@ export default function SignIn() {
                             disabled={loading}
                         >
                             {loading
-                                ? <ActivityIndicator color="#fff" />
+                                ? <ActivityIndicator color={colors.onPrimary} />
                                 : <Text style={s.submitText}>Log In</Text>
                             }
                         </Pressable>
 
                         <Pressable style={s.switchRow} onPress={() => router.replace('/sign-up' as any)}>
-                            <Text style={s.switchText}>Don't have an account? </Text>
+                            <Text style={s.switchText}>Don&apos;t have an account? </Text>
                             <Text style={s.switchLink}>Sign up</Text>
                         </Pressable>
                     </View>
@@ -138,60 +153,60 @@ export default function SignIn() {
     );
 }
 
-const s = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: '#060c1f' },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+    screen: { flex: 1, backgroundColor: colors.background },
     flex:   { flex: 1 },
     bg:     { position: 'absolute', width: W, height: H },
     overlay:{ position: 'absolute', width: W, height: H, backgroundColor: 'rgba(6,12,31,0.72)' },
 
-    scroll: { flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 40 },
+    scroll: { flexGrow: 1, justifyContent: 'center', paddingBottom: 40 },
 
     back: { padding: 20, paddingTop: 60, alignSelf: 'flex-start' },
 
     card: {
-        backgroundColor: 'rgba(11,20,40,0.90)',
-        marginHorizontal: 16, borderRadius: 24,
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-        padding: 24, gap: 10,
+        backgroundColor: colors.background,
+        width: '100%', maxWidth: 520, alignSelf: 'center', borderRadius: 0,
+        padding: 24, gap: 14,
     },
 
-    title: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 4 },
+    title: { fontSize: 22, fontWeight: '600', color: colors.foreground, marginBottom: 4 },
 
-    orText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.4)', textAlign: 'center', letterSpacing: 1.2 },
+    orText: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, textAlign: 'center', letterSpacing: 1.2 },
     oauthRow: { flexDirection: 'row', gap: 10 },
     oauthBtn: {
         flex: 1, paddingVertical: 11, borderRadius: 12,
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
-        alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)',
+        borderWidth: 1, borderColor: colors.border,
+        alignItems: 'center', backgroundColor: colors.input,
     },
-    oauthBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
+    oauthBtnText: { fontSize: 13, fontWeight: '600', color: colors.foreground },
 
-    label: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', marginBottom: -4 },
+    label: { fontSize: 13, fontWeight: '600', color: colors.foreground },
     input: {
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: colors.input,
+        borderWidth: 1, borderColor: colors.border,
         borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-        fontSize: 14, color: '#fff',
+        fontSize: 14, color: colors.foreground,
     },
 
-    pwRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: -4 },
-    forgotText: { fontSize: 12, fontWeight: '600', color: '#9333ea' },
+    pwRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    notice: { fontSize: 13, lineHeight: 18, color: colors.warning, backgroundColor: `${colors.warning}1a`, padding: 12, borderRadius: 10 },
+    forgotText: { fontSize: 12, fontWeight: '600', color: colors.primary },
     pwWrap: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: colors.input,
+        borderWidth: 1, borderColor: colors.border,
         borderRadius: 12, paddingHorizontal: 14, paddingVertical: 2,
     },
     eyeBtn: { padding: 8 },
 
     submitBtn: {
-        backgroundColor: '#7c3aed', borderRadius: 14,
+        backgroundColor: colors.primary, borderRadius: 10,
         paddingVertical: 15, alignItems: 'center', marginTop: 6,
-        shadowColor: '#7c3aed', shadowOpacity: 0.35, shadowRadius: 12, elevation: 5,
+
     },
-    submitText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+    submitText: { fontSize: 16, fontWeight: '700', color: colors.onPrimary },
 
     switchRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
-    switchText:{ fontSize: 13, color: 'rgba(255,255,255,0.5)' },
-    switchLink:{ fontSize: 13, fontWeight: '700', color: '#9333ea' },
+    switchText:{ fontSize: 13, color: colors.mutedForeground },
+    switchLink:{ fontSize: 13, fontWeight: '700', color: colors.primary },
 });

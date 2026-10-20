@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
+
+type ReleaseRow = Database['public']['Tables']['releases']['Row'];
 import { AdminRelease } from '@/types/admin';
 
 interface AdminEditReleaseDialogProps {
@@ -82,7 +85,7 @@ export function AdminEditReleaseDialog({ release, open, onOpenChange }: AdminEdi
                     title: formData.title,
                     genre: formData.genre,
                     release_type: formData.release_type,
-                    status: formData.status,
+                    status: formData.status as ReleaseRow['status'],
                     release_date: formData.release_date, // Ensure format YYYY-MM-DD matches validation if any
                     label: formData.label || null,
                     upc_ean: formData.upc_ean || null,

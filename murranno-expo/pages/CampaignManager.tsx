@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { EmptyState, ErrorState, ListSkeleton } from '@/components/states/StateViews';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
     Pressable, ActivityIndicator,
@@ -27,7 +28,7 @@ export const CampaignManagerPage = () => {
     const router = useRouter();
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-    const { campaigns, stats, loading } = useCampaigns();
+    const { campaigns, stats, loading, error, refetch } = useCampaigns();
     const [filter, setFilter] = useState<FilterTab>('all');
 
     const filtered = filter === 'all'
@@ -79,14 +80,14 @@ export const CampaignManagerPage = () => {
                     {filter === 'all' ? 'All Campaigns' : `${filter} Campaigns`}
                 </Text>
 
-                {loading ? (
-                    <View style={s.centred}>
-                        <ActivityIndicator color={colors.primaryGlow} size="large" />
-                    </View>
+                {loading && !campaigns.length ? (
+                    <ListSkeleton rows={4} media={false} />
+                ) : error && !campaigns.length ? (
+                    <ErrorState error={error} title="Couldn’t load your campaigns" onRetry={() => refetch()} />
+                ) : campaigns.length === 0 ? (
+                    <EmptyState icon={Target} title="No campaigns yet" body="Promote a release with playlist pitching, ads and influencer pushes. Your campaigns and their progress show up here." />
                 ) : filtered.length === 0 ? (
-                    <View style={s.centred}>
-                        <Text style={[s.emptyText, { color: colors.mutedForeground }]}>No campaigns found</Text>
-                    </View>
+                    <EmptyState title={`No ${filter} campaigns`} body="Campaigns move here as their status changes." secondary={{ label: 'Show all campaigns', onPress: () => setFilter('all') }} />
                 ) : (
                     filtered.map((campaign) => {
                         const statusColor = STATUS_COLOR[campaign.status] ?? '#6b7280';
@@ -128,26 +129,26 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     StyleSheet.create({
         screen:        { flex: 1, backgroundColor: colors.background },
         scroll:        { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, gap: 14, paddingTop: 4 },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, gap: 14, paddingTop: 4 },
 
         statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-        statCard:  { width: '47.5%', borderRadius: 16, borderWidth: 1, padding: 14, gap: 4, alignItems: 'flex-start' },
-        statValue: { fontSize: 20, fontWeight: '800' },
+        statCard:  { width: '47.5%', borderRadius: 10, borderWidth: 1, padding: 14, gap: 4, alignItems: 'flex-start' },
+        statValue: { fontSize: 20, fontWeight: '600' },
         statLabel: { fontSize: 11, marginTop: -2 },
 
         filterScroll: { flexGrow: 0 },
         filterChip: {
-            paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+            paddingHorizontal: 14, paddingVertical: 7, borderRadius: 12,
             borderWidth: 1, borderColor: colors.border, marginRight: 6,
             backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
         },
         filterChipText: { fontSize: 12, fontWeight: '600' },
 
-        sectionTitle: { fontSize: 18, fontWeight: '800' },
+        sectionTitle: { fontSize: 18, fontWeight: '600' },
         centred:      { paddingVertical: 48, alignItems: 'center' },
         emptyText:    { fontSize: 13 },
 
-        campaignCard:   { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+        campaignCard:   { borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
         campaignTop:    { flexDirection: 'row', alignItems: 'flex-start', padding: 14, gap: 12 },
         campaignName:   { fontSize: 14, fontWeight: '700' },
         campaignArtist: { fontSize: 12 },

@@ -1,0 +1,48 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "murranno-api",
+  "main": "src/index.ts",
+  "account_id": "d93620af8472697b06599191faa2c954",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "murranno-db",
+      "database_id": "9a6392c7-10af-470f-b2b9-15c1bce65ada"
+    }
+  ],
+  "r2_buckets": [
+    // Uploaded media (covers, audio, avatars, KYC documents), served at /media/<key>
+    { "binding": "MEDIA", "bucket_name": "murranno-media" }
+  ],
+  "send_email": [
+    { "name": "SEND_EMAIL" }
+  ],
+  "ratelimits": [
+    // Brute-force guard for login, OTP, recovery and PIN endpoints (per IP / per user)
+    { "name": "AUTH_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+  ],
+  // Old *.workers.dev URL kept live until every client uses the custom domain
+  "workers_dev": true,
+  "routes": [
+    // Custom domain (Cloudflare creates the DNS record and certificate on deploy)
+    { "pattern": "api.murrannomusic.co", "custom_domain": true }
+  ],
+  "triggers": {
+    // Releases 12h-delayed withdrawals and expires stale OTPs / idempotency keys
+    "crons": ["*/15 * * * *"]
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    // Public web app origin (email links, payment redirects); dashboard edits are overwritten on deploy.
+    "APP_URL": "https://app.murrannomusic.co",
+    // Comma-separated origins/prefixes accepted for auth redirect_to and CORS (Capacitor uses the localhost ones)
+    "ALLOWED_REDIRECTS": "https://app.murrannomusic.co,https://landing.murrannomusic.co,https://murrannomusic.co,https://www.murrannomusic.co,https://murranno.murranno.workers.dev,https://murrannomusic.site,murranno://,capacitor://localhost,https://localhost",
+    "EMAIL_FROM": "Murranno Music <hello@murrannomusic.co>"
+  }
+  // Secrets (set with `wrangler secret put <NAME>`, or .dev.vars locally):
+  //   JWT_SECRET, PAYSTACK_SECRET_KEY, RESEND_API_KEY,
+  //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  //   APPLE_SERVICES_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
+}

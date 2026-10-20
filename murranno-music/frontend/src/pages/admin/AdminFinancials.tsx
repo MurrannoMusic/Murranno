@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/admin/AdminLayout';
@@ -93,7 +94,7 @@ export default function AdminFinancials() {
     },
   });
 
-  const { data: transactions, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery({
+  const { data: transactions, isLoading: transactionsLoading, error, refetch: refetchTransactions } = useQuery({
     queryKey: ['admin-transactions', statusFilter],
     queryFn: async () => {
       let query = supabase
@@ -336,18 +337,8 @@ export default function AdminFinancials() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactionsLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center">
-                      Loading transactions...
-                    </TableCell>
-                  </TableRow>
-                ) : transactions?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center">
-                      No transactions found
-                    </TableCell>
-                  </TableRow>
+                {transactionsLoading || error || !transactions?.length ? (
+                  <TableStateRow colSpan={5} loading={transactionsLoading} error={error} onRetry={() => refetchTransactions()} empty={{ title: 'No withdrawals yet', body: 'Artist withdrawal requests will show up here.' }} filtered={statusFilter !== 'all'} onClear={() => setStatusFilter('all')} />
                 ) : (
                   transactions?.map((transaction) => (
                     <TableRow key={transaction.id}>

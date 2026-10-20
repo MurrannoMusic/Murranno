@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { X, DollarSign, Clock, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { FieldError } from '@/components/forms/FieldError';
+import { SuccessState, friendlyError } from '@/components/states/StateViews';
+import { fieldA11y } from '@/lib/validation';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +26,9 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
   const [amount, setAmount] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ amount?: string; method?: string; form?: string }>({});
+  const [result, setResult] = useState<{ status: string; net_amount?: number; scheduled_for?: string | null } | null>(null);
+  const close = () => { setResult(null); setErrors({}); onClose(); };
   const { toast } = useToast();
   const { payoutMethods } = usePayoutMethods();
 
@@ -36,30 +42,12 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
   const { authenticate, checkAvailability } = useBiometricAuth();
 
   const handleWithdraw = async () => {
-    if (!amount || withdrawalAmount <= 0) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a valid amount',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (withdrawalAmount > availableBalance) {
-      toast({
-        title: 'Error',
-        description: 'Insufficient balance',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (!selectedMethod) {
-      toast({
-        title: 'Error',
-        description: 'Please select a payout method',
-        variant: 'destructive',
-      });
-      return;
-    }
+    const found = {
+      amount: !amount || withdrawalAmount <= 0 ? 'Enter how much you want to withdraw' : withdrawalAmount > availableBalance ? `You can withdraw up to ₦${availableBalance.toLocaleString()}` : undefined,
+      method: !selectedMethod ? 'Choose the bank account to pay into' : undefined,
+    };
+    setErrors(found);
+    if (found.amount || found.method) return;
 
     if (isLocked) {
       toast({
@@ -126,24 +114,16 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
       if (error) throw error;
 
       if (data.success) {
-        toast({
-          title: 'Success',
-          description: 'Withdrawal request submitted successfully!',
-        });
+        setResult(data.data ?? { status: 'processing' });
         setAmount('');
         setSelectedMethod('');
         onSuccess?.();
-        onClose();
       } else {
         throw new Error(data.error || 'Failed to initiate withdrawal');
       }
     } catch (error: any) {
       console.error('Error initiating withdrawal:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to process withdrawal',
-        variant: 'destructive',
-      });
+      setErrors({ form: friendlyError(error).message });
     } finally {
       setLoading(false);
       setPinLoading(false);
@@ -151,17 +131,29 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
   };
 
   return (
-    <Sheet open={open} onOpenChange={onClose}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) close(); }}>
       <SheetContent side="bottom" className="rounded-t-[24px]">
         <SheetHeader>
           <div className="flex items-center justify-between">
             <SheetTitle className="text-xl font-bold">Withdraw Funds</SheetTitle>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <Button variant="ghost" size="icon" onClick={close} aria-label="Close">
               <X className="h-5 w-5" />
             </Button>
           </div>
         </SheetHeader>
 
+        {result ? (
+          <SuccessState
+            className="mt-2"
+            title={result.status === 'processing' ? 'Withdrawal on its way' : result.status === 'pending_delay' ? 'Withdrawal scheduled' : 'Withdrawal submitted for review'}
+            body={result.status === 'processing'
+              ? 'We’ve sent it to your bank. It usually arrives within minutes, and we’ll email you when it lands.'
+              : result.status === 'pending_delay'
+                ? `For your security it will be sent ${result.scheduled_for ? `on ${new Date(result.scheduled_for).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}` : 'within 12 hours'}. We’ll email you when it’s paid.`
+                : 'Larger withdrawals are checked by our team first. We’ll email you as soon as it’s approved and sent.'}
+            action={{ label: 'Done', onClick: close }}
+          />
+        ) : (
         <div className="mt-6 space-y-6">
           {/* Available Balance */}
           <div className="bg-primary/10 rounded-[16px] p-4 border border-primary/20">
@@ -179,17 +171,15 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
               <Input
                 type="number"
                 placeholder="0.00"
+                id="withdraw-amount"
+                inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => { setAmount(e.target.value); setErrors({}); }}
                 className="pl-8 text-lg font-semibold"
+                {...fieldA11y('withdraw-amount', errors.amount ?? (withdrawalAmount > availableBalance ? 'over' : undefined))}
               />
             </div>
-            {withdrawalAmount > availableBalance && (
-              <div className="flex items-center gap-2 mt-2 text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                <span className="text-xs">Amount exceeds available balance</span>
-              </div>
-            )}
+            <FieldError id="withdraw-amount" error={errors.amount ?? (withdrawalAmount > availableBalance ? `You can withdraw up to ₦${availableBalance.toLocaleString()}` : undefined)} />
           </div>
 
           {/* Payout Method Selection */}
@@ -203,8 +193,10 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
               </div>
             ) : (
               <select
+                id="withdraw-method"
                 value={selectedMethod}
-                onChange={(e) => setSelectedMethod(e.target.value)}
+                onChange={(e) => { setSelectedMethod(e.target.value); setErrors({}); }}
+                {...fieldA11y('withdraw-method', errors.method)}
                 className="w-full px-4 py-3 rounded-[16px] bg-secondary/30 border border-border text-foreground font-medium"
               >
                 <option value="">Select a payout method</option>
@@ -215,6 +207,7 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
                 ))}
               </select>
             )}
+            <FieldError id="withdraw-method" error={errors.method} />
           </div>
 
           {/* Fee Breakdown */}
@@ -273,10 +266,12 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
             </div>
           )}
 
+          {errors.form && <p role="alert" className="text-sm text-destructive">{errors.form}</p>}
+
           {/* Withdraw Button */}
           <Button
             onClick={handleWithdraw}
-            disabled={!amount || withdrawalAmount <= 0 || withdrawalAmount > availableBalance || !selectedMethod || loading || securityLoading || isLocked}
+            disabled={loading || securityLoading || isLocked}
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-6 text-base"
           >
             {loading ? (
@@ -289,6 +284,7 @@ export const WithdrawSheet = ({ open, onClose, availableBalance, onSuccess }: Wi
             )}
           </Button>
         </div>
+        )}
       </SheetContent>
 
       <TransactionPinDialog

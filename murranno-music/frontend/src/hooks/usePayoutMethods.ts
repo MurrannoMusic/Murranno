@@ -22,10 +22,12 @@ export interface PayoutMethod {
 export const usePayoutMethods = () => {
   const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
   const { toast } = useToast();
 
   const fetchPayoutMethods = async () => {
     try {
+      setError(null);
       setLoading(true);
       const { data, error } = await supabase.functions.invoke('get-payout-methods');
 
@@ -38,11 +40,7 @@ export const usePayoutMethods = () => {
       setPayoutMethods(data.payoutMethods || []);
     } catch (error: any) {
       console.error('Error fetching payout methods:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch payout methods',
-        variant: 'destructive',
-      });
+      setError(error); // shown in place by the payout methods tab, with a retry
     } finally {
       setLoading(false);
     }
@@ -109,6 +107,7 @@ export const usePayoutMethods = () => {
   }, []);
 
   return {
+    error,
     payoutMethods,
     loading,
     deleteMethod,

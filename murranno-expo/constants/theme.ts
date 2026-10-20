@@ -9,10 +9,10 @@ import { Platform } from 'react-native';
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 const palette = {
-  primary:     '#7c3aed', // hsl(263 70% 50%)
-  primaryGlow: '#9333ea', // hsl(263 85% 60%)
-  accent:      '#8b5cf6', // hsl(262 83% 58%)
-  fuchsia:     '#e879f9', // brand logo / pop color
+  primary:     '#7350b8',
+  primaryGlow: '#7350b8',
+  accent:      '#7350b8',
+  fuchsia:     '#7350b8',
   success:     '#22c55e', // hsl(142 71% 45%)
   warning:     '#f59e0b', // hsl(38 92% 50%)
   destructive: '#ef4444',
@@ -21,20 +21,24 @@ const palette = {
 // ─── Dark tokens (default theme) ─────────────────────────────────────────────
 
 const dark = {
-  background:          '#060c1f', // hsl(222 84% 5%)
-  backgroundDeep:      '#040918',
-  card:                '#0b1428', // hsl(222 84% 8%)
-  cardHover:           '#101d36',
+  background:          '#111214',
+  backgroundDeep:      '#0c0d0f',
+  card:                '#1a1b1e',
+  cardHover:           '#222327',
 
-  foreground:          '#f8fafc', // hsl(210 40% 98%)
-  mutedForeground:     '#8896a7', // hsl(215 20% 65%)
+  foreground:          '#f5f4f7',
+  mutedForeground:     '#a6a5af',
 
-  border:              '#1e2a3a', // hsl(217 32% 17%)
-  input:               '#1e2a3a',
-  secondary:           '#1e2a3a',
-  secondaryForeground: '#d0d9e6',
+  border:              '#303136',
+  input:               '#1a1b1e',
+  secondary:           '#242529',
+  secondaryForeground: '#d6d4dd',
 
   ...palette,
+  primary: '#a895eb',
+  primaryGlow: '#a895eb',
+  accent: '#a895eb',
+  onPrimary: '#171122',
 
   // Opacity utilities
   overlayLight:  'rgba(255,255,255,0.04)',
@@ -42,29 +46,33 @@ const dark = {
   borderOpacity: 'rgba(255,255,255,0.07)',
 
   // Tab bar
-  tabBar:         '#060c1f',
-  tabBarBorder:   '#1e2a3a',
-  tabIconDefault: '#4a5568',
-  tabIconSelected:'#9333ea',
+  tabBar:         '#111214',
+  tabBarBorder:   '#303136',
+  tabIconDefault: '#a6a5af',
+  tabIconSelected:'#a895eb',
 } as const;
 
 // ─── Light tokens ─────────────────────────────────────────────────────────────
 
 const light = {
-  background:          '#fafafa', // hsl(0 0% 98%)
-  backgroundDeep:      '#f1f5f9',
+  background:          '#faf9f6',
+  backgroundDeep:      '#f0efec',
   card:                '#ffffff',
-  cardHover:           '#f8fafc',
+  cardHover:           '#f3f1ed',
 
-  foreground:          '#05091a', // hsl(222 84% 4%)
-  mutedForeground:     '#64748b', // hsl(215 16% 47%)
+  foreground:          '#202024',
+  mutedForeground:     '#696770',
 
-  border:              '#e2e8f0', // hsl(214 32% 91%)
-  input:               '#e2e8f0',
-  secondary:           '#f0f5ff', // hsl(210 40% 95%)
-  secondaryForeground: '#1e293b',
+  border:              '#dedcd7',
+  input:               '#ffffff',
+  secondary:           '#eeece7',
+  secondaryForeground: '#4d4a53',
 
   ...palette,
+  onPrimary: '#ffffff',
+  success: '#187247',
+  warning: '#946000',
+  destructive: '#bd323b',
 
   // Opacity utilities
   overlayLight:  'rgba(0,0,0,0.03)',
@@ -72,10 +80,10 @@ const light = {
   borderOpacity: 'rgba(0,0,0,0.06)',
 
   // Tab bar
-  tabBar:         '#ffffff',
-  tabBarBorder:   '#e2e8f0',
-  tabIconDefault: '#94a3b8',
-  tabIconSelected:'#7c3aed',
+  tabBar:         '#faf9f6',
+  tabBarBorder:   '#dedcd7',
+  tabIconDefault: '#696770',
+  tabIconSelected:'#7350b8',
 } as const;
 
 // ─── Shared scale tokens ──────────────────────────────────────────────────────
@@ -103,7 +111,7 @@ export const FontWeight = {
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 export const Colors = { dark, light };
-export type ThemeColors = typeof dark;
+export type ThemeColors = { [Key in keyof typeof dark]: string };
 
 export const Fonts = Platform.select({
   ios:     { sans: 'system-ui', serif: 'ui-serif', rounded: 'ui-rounded', mono: 'ui-monospace' },

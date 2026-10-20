@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ListSkeleton, TableStateRow } from '@/components/states/StateViews';
 import { useMutation } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Edit, Trash2, Package, Tag, Upload, X, ImagePlus } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { API_URL, supabase } from '@/integrations/supabase/client';
 import { usePromotionServices } from '@/hooks/usePromotionServices';
 import { usePromotionBundles } from '@/hooks/usePromotionBundles';
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload';
@@ -43,8 +44,8 @@ interface BundleFormData {
 }
 
 export default function AdminPromotions() {
-  const { services, loading: servicesLoading, categories, refetch: refetchServices } = usePromotionServices();
-  const { bundles, loading: bundlesLoading, refetch: refetchBundles } = usePromotionBundles();
+  const { services, loading: servicesLoading, categories, error: servicesError, refetch: refetchServices } = usePromotionServices();
+  const { bundles, loading: bundlesLoading, error: bundlesError, refetch: refetchBundles } = usePromotionBundles();
   const { uploadImage, uploading, progress } = useCloudinaryUpload();
 
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
@@ -104,13 +105,12 @@ export default function AdminPromotions() {
       formData.append('folder', 'promotions/services/videos');
 
       const { data: { session } } = await supabase.auth.getSession();
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-audio-cloudinary`;
+      const url = `${API_URL}/functions/v1/upload-audio-cloudinary`;
 
       const res = await fetch(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session?.access_token ?? ''}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY!,
         },
         body: formData,
       });
@@ -486,7 +486,7 @@ export default function AdminPromotions() {
           </CardHeader>
           <CardContent>
             {servicesLoading ? (
-              <div className="text-center py-8">Loading services...</div>
+              <ListSkeleton rows={4} media={false} />
             ) : (
               <Table>
                 <TableHeader>
@@ -501,7 +501,7 @@ export default function AdminPromotions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {services.map((service) => (
+                  {servicesError || !services.length ? <TableStateRow colSpan={7} error={servicesError} onRetry={refetchServices} empty={{ title: 'No services yet', body: 'Add the first promotion service artists can buy.' }} /> : services.map((service) => (
                     <TableRow key={service.id}>
                       <TableCell className="font-medium">{service.name}</TableCell>
                       <TableCell>
@@ -568,7 +568,7 @@ export default function AdminPromotions() {
           </CardHeader>
           <CardContent>
             {bundlesLoading ? (
-              <div className="text-center py-8">Loading bundles...</div>
+              <ListSkeleton rows={3} media={false} />
             ) : (
               <Table>
                 <TableHeader>
@@ -582,7 +582,7 @@ export default function AdminPromotions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bundles.map((bundle) => (
+                  {bundlesError || !bundles.length ? <TableStateRow colSpan={6} error={bundlesError} onRetry={refetchBundles} empty={{ title: 'No bundles yet', body: 'Group services into a bundle to offer a package price.' }} /> : bundles.map((bundle) => (
                     <TableRow key={bundle.id}>
                       <TableCell className="font-medium">{bundle.name}</TableCell>
                       <TableCell>

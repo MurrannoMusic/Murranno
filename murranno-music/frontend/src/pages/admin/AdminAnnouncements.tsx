@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -35,7 +36,7 @@ export default function AdminAnnouncements() {
         is_active: true
     });
 
-    const { data: announcements, isLoading } = useQuery({
+    const { data: announcements, isLoading, error, refetch } = useQuery({
         queryKey: ['admin-announcements'],
         queryFn: async () => {
             const { data, error } = await supabase
@@ -143,11 +144,9 @@ export default function AdminAnnouncements() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {isLoading ? (
-                                    <TableRow><TableCell colSpan={6} className="text-center">Loading...</TableCell></TableRow>
-                                ) : announcements?.length === 0 ? (
-                                    <TableRow><TableCell colSpan={6} className="text-center">No announcements</TableCell></TableRow>
-                                ) : (
+                                {isLoading || error || !announcements?.length ? (
+                  <TableStateRow colSpan={6} loading={isLoading} error={error} onRetry={() => refetch()} empty={{ title: 'No announcements yet', body: 'Create one to show a banner across the app.' }} />
+                ) : (
                                     announcements?.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell>

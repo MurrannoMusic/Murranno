@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/admin/AdminLayout';
@@ -29,7 +30,7 @@ export default function AdminCampaigns() {
   const [performanceData, setPerformanceData] = useState<any[]>([]);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-campaigns', page, search, statusFilter],
     queryFn: async () => {
       const payload: any = {
@@ -237,18 +238,8 @@ export default function AdminCampaigns() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : data?.campaigns?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center">
-                      No campaigns found
-                    </TableCell>
-                  </TableRow>
+                {isLoading || error || !data?.campaigns?.length ? (
+                  <TableStateRow colSpan={7} loading={isLoading} error={error} onRetry={() => refetch()} empty={{ title: 'No campaigns yet', body: 'Campaigns artists create will show up here.' }} filtered={!!search || statusFilter !== 'all'} onClear={() => { setSearch(''); setStatusFilter('all'); }} />
                 ) : (
                   data?.campaigns?.map((campaign: Campaign) => (
                     <TableRow key={campaign.id}>

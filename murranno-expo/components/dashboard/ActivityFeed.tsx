@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { EmptyState, ErrorState, ListSkeleton } from '@/components/states/StateViews';
 import { View, Text, StyleSheet } from 'react-native';
 import { Upload, DollarSign, Play, Info } from 'lucide-react-native';
 import { useRecentActivity } from '@/hooks/useRecentActivity';
@@ -11,39 +12,29 @@ const ICON_MAP = {
     info:   Info,
 };
 
-const TYPE_COLOR: Record<string, string> = {
-    release:  '#a855f7',
-    campaign: '#38bdf8',
-    earning:  '#10b981',
-    info:     '#64748b',
-};
-
 export const ActivityFeed = () => {
-    const { activities, loading } = useRecentActivity();
-    const { colors, isDark } = useTheme();
-    const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+    const { activities, loading, error, refetch } = useRecentActivity();
+    const { colors } = useTheme();
+    const s = useMemo(() => makeStyles(colors), [colors]);
 
     return (
         <View>
-            <Text style={s.sectionLabel}>Activity</Text>
+            <Text style={s.sectionLabel}>Recent activity</Text>
 
-            {loading ? (
-                <View style={s.emptyBox}>
-                    <View style={[s.skeletonLine, { width: '70%' }]} />
-                    <View style={[s.skeletonLine, { width: '50%', marginTop: 8 }]} />
-                </View>
+            {loading && !activities.length ? (
+                <ListSkeleton rows={3} />
+            ) : error && !activities.length ? (
+                <ErrorState error={error} title="Couldn’t load recent activity" onRetry={refetch} />
             ) : activities.length === 0 ? (
-                <View style={s.emptyBox}>
-                    <Text style={s.emptyText}>No recent activity.</Text>
-                </View>
+                <EmptyState icon={Info} title="No activity yet" body="Uploads, payouts and new stream reports will show up here." />
             ) : (
                 <View style={s.list}>
                     {activities.map((item) => {
                         const IconComp   = ICON_MAP[item.icon] ?? Info;
-                        const accentColor = TYPE_COLOR[item.type] ?? '#64748b';
+                        const accentColor = colors.mutedForeground;
                         return (
                             <View key={item.id} style={s.row}>
-                                <View style={[s.iconWrap, { backgroundColor: `${accentColor}20` }]}>
+                                <View style={[s.iconWrap, { backgroundColor: colors.background }]}>
                                     <IconComp size={15} color={accentColor} />
                                 </View>
                                 <View style={s.content}>
@@ -60,21 +51,17 @@ export const ActivityFeed = () => {
     );
 };
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boolean) {
-    const rowBg     = isDark ? 'rgba(255,255,255,0.04)' : colors.card;
-    const rowBorder = isDark ? 'rgba(255,255,255,0.07)' : colors.border;
-    const skelBg    = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+    const skelBg = colors.secondary;
 
     return StyleSheet.create({
         sectionLabel: {
-            fontSize: 11, fontWeight: '600', color: colors.mutedForeground,
-            textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10,
+            fontSize: 21, fontWeight: '600', color: colors.foreground, marginBottom: 12,
         },
         list: { gap: 8 },
         row: {
             flexDirection: 'row', alignItems: 'center', gap: 12,
-            padding: 12, backgroundColor: rowBg,
-            borderRadius: 14, borderWidth: 1, borderColor: rowBorder,
+            paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
         },
         iconWrap: {
             width: 36, height: 36, borderRadius: 18,
@@ -85,10 +72,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         time:    { fontSize: 11, color: colors.mutedForeground },
         dot:     { width: 6, height: 6, borderRadius: 3 },
         emptyBox: {
-            padding: 16, backgroundColor: rowBg,
-            borderRadius: 14, borderWidth: 1, borderColor: rowBorder,
+            paddingVertical: 24,
         },
-        emptyText:   { fontSize: 13, color: colors.mutedForeground, textAlign: 'center' },
+        emptyText:   { fontSize: 13, color: colors.mutedForeground, textAlign: 'left' },
         skeletonLine:{ height: 12, borderRadius: 6, backgroundColor: skelBg },
     });
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TableStateRow } from '@/components/states/StateViews';
 import { useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ export default function AdminUsers() {
     setSearch,
     filters,
     handleFilterChange,
+    resetFilters,
   } = useAdminFilters({
     tier: 'all',
     status: 'all',
@@ -31,6 +33,8 @@ export default function AdminUsers() {
     total,
     totalPages,
     isLoading,
+    error,
+    refetch,
     updateRoleMutation,
   } = useAdminUsers({
     page,
@@ -106,18 +110,8 @@ export default function AdminUsers() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center">
-                      No users found
-                    </TableCell>
-                  </TableRow>
+                {isLoading || error || !users.length ? (
+                  <TableStateRow colSpan={6} loading={isLoading} error={error} onRetry={() => refetch()} empty={{ title: 'No users yet' }} filtered={!!search || Object.values(filters).some((v) => v !== 'all')} onClear={resetFilters} />
                 ) : (
                   users.map((user: AdminUser) => (
                     <TableRow key={user.id}>

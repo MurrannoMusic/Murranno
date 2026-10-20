@@ -1,3 +1,4 @@
+import {errorMessage} from '@/lib/api';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -35,26 +36,28 @@ export interface ReleaseDetail {
 export const useReleaseDetail = (releaseId: string | undefined) => {
     const [release, setRelease] = useState<ReleaseDetail | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (releaseId) fetchDetail();
+        if (releaseId) fetchDetail(); else setLoading(false);
     }, [releaseId]);
 
     const fetchDetail = async () => {
         if (!releaseId) return;
         try {
-            setLoading(true);
+            setLoading(true); setError(null);
             const { data, error } = await supabase.functions.invoke('get-release-detail', {
                 body: { releaseId },
             });
             if (error) throw error;
-            if (data?.success) setRelease(data.release);
+            if (data?.success) setRelease({ ...data.release, tracks: (data.release.tracks || []).map((t: any) => ({ ...t, audio_url: t.audio_url || t.audioFileUrl || t.audio_file_url || null })) });
         } catch (err) {
+            setError(await errorMessage(err));
             console.error('useReleaseDetail error:', err);
         } finally {
             setLoading(false);
         }
     };
 
-    return { release, loading, refetch: fetchDetail };
+    return { release, loading, error, refetch: fetchDetail };
 };

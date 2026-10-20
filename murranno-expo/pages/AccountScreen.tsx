@@ -1,11 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
-    Pressable, ActivityIndicator, Alert,
+    Pressable, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { ChevronRight, User, Music2, Plus } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
+import { supabase } from '@/integrations/supabase/client';
 import { useTheme } from '@/hooks/useTheme';
 import { useArtistProfile } from '@/hooks/useArtistProfile';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -16,11 +17,13 @@ export const AccountScreen = () => {
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
     const { profile, loading } = useArtistProfile();
 
-    const displayName = profile
-        ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.stage_name || 'Murranno Music'
-        : 'Murranno Music';
-
-    const email = profile?.email ?? '';
+    const displayName = profile?.stage_name || 'Murranno Music';
+    const [email, setEmail] = useState('');
+    useEffect(() => {
+        let active = true;
+        supabase.auth.getUser().then(({ data }) => { if (active) setEmail(data.user?.email || ''); });
+        return () => { active = false; };
+    }, []);
 
     return (
         <View style={s.screen}>
@@ -81,7 +84,7 @@ export const AccountScreen = () => {
                     </Text>
                     <Pressable
                         style={s.addLinkBtn}
-                        onPress={() => Alert.alert('Streaming Links', 'Streaming link management coming soon.')}
+                        onPress={() => router.push('/app/profile')}
                     >
                         <Plus size={14} color={colors.primaryGlow} />
                         <Text style={s.addLinkText}>Add Streaming Links</Text>
@@ -100,7 +103,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     return StyleSheet.create({
         screen:       { flex: 1, backgroundColor: colors.background },
         scroll:       { flex: 1 },
-        scrollContent:{ paddingHorizontal: 16, paddingTop: 8 },
+        scrollContent:{ width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 8 },
 
         back: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, marginBottom: 4 },
         backText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
@@ -110,7 +113,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
 
         profileCard: {
             flexDirection: 'row', alignItems: 'center', gap: 14,
-            backgroundColor: colors.card, borderRadius: 16,
+            backgroundColor: colors.card, borderRadius: 10,
             borderWidth: 1, borderColor: colors.border,
             padding: 16,
         },
@@ -122,14 +125,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             overflow: 'hidden',
         },
         avatarImg: { width: '100%', height: '100%' },
-        avatarInitials: { fontSize: 20, fontWeight: '800', color: colors.mutedForeground },
+        avatarInitials: { fontSize: 20, fontWeight: '600', color: colors.mutedForeground },
         profileInfo:  { flex: 1, gap: 2 },
         profileName:  { fontSize: 16, fontWeight: '700', color: colors.foreground },
         artistBadge:  { fontSize: 11, fontWeight: '700', color: colors.primaryGlow, letterSpacing: 0.6 },
         profileEmail: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
 
         card: {
-            backgroundColor: colors.card, borderRadius: 16,
+            backgroundColor: colors.card, borderRadius: 10,
             borderWidth: 1, borderColor: colors.border,
             padding: 20, alignItems: 'center', gap: 14,
         },

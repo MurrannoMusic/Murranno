@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Network, ConnectionStatus } from '@capacitor/network';
 import { isNativeApp } from '@/utils/platformDetection';
-import { toast } from 'sonner';
 
 export const useNetwork = () => {
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
@@ -41,12 +40,7 @@ export const useNetwork = () => {
         setIsOnline(status.connected);
         setConnectionType(status.connectionType);
 
-        // Show toast on connection change
-        if (status.connected) {
-          toast.success('Back online');
-        } else {
-          toast.error('No internet connection');
-        }
+        // The offline banner and 'Back online' toast live in components/app/NetworkStatus.tsx.
       });
     };
 

@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { PermissionDenied } from '@/components/states/StateViews';
 
 interface AdminRouteProps {
   children: ReactNode;
@@ -25,10 +26,7 @@ export const AdminRoute = ({ children }: AdminRouteProps) => {
     // Wait until role is loaded before deciding
     if (!userRole) return;
 
-    if (userRole.tier !== 'admin') {
-      navigate('/app');
-      return;
-    }
+    // Non-admins see an explanation (below) instead of a silent redirect.
   }, [user, userRole, loading, navigate]);
 
   if (loading) {
@@ -58,7 +56,7 @@ export const AdminRoute = ({ children }: AdminRouteProps) => {
   }
 
   if (userRole.tier !== 'admin') {
-    return null;
+    return <PermissionDenied title="Admins only" body="The admin panel is restricted to Murranno staff. Your artist dashboard has everything for your music." />;
   }
 
   // Show warning on mobile devices

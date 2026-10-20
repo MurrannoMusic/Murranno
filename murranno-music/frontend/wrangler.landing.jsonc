@@ -1,0 +1,18 @@
+{
+  // Marketing site (same build as the app; "/" shows the landing on these hosts).
+  // Deploy: npm run build:site && npx wrangler deploy -c wrangler.landing.jsonc  (pre-rendered for SEO)
+  "$schema": "../../murranno-worker/node_modules/wrangler/config-schema.json",
+  "name": "murranno-landing",
+  "account_id": "d93620af8472697b06599191faa2c954",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "murrannomusic.co", "custom_domain": true },
+    { "pattern": "www.murrannomusic.co", "custom_domain": true },
+    { "pattern": "landing.murrannomusic.co", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./dist-landing",
+    "not_found_handling": "single-page-application"
+  }
+}

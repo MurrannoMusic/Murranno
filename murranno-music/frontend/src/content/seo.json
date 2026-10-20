@@ -1,0 +1,80 @@
+{
+  "site": {
+    "name": "Murranno Music",
+    "url": "https://murrannomusic.co",
+    "locale": "en_NG",
+    "image": "/landing/og-image.png",
+    "description": "Murranno Music is a Lagos-based music distribution and promotion company. Release your songs to Spotify, Apple Music, Boomplay, Audiomack, YouTube, TikTok and 150+ stores, keep 100% of your masters, and get paid in naira.",
+    "brandKeywords": ["Murranno", "Murranno Music", "murrannomusic", "murrannomusic.co", "Murranno distribution", "Murranno promotions", "Murranno app"],
+    "keywords": [
+      "music distribution Nigeria", "music distribution in Nigeria", "best music distribution company in Nigeria", "music distributor in Nigeria", "music distribution company in Lagos",
+      "music promotion Nigeria", "music promotion company in Nigeria", "music promotion in Lagos", "Afrobeats distribution", "Afrobeats promotion",
+      "distribute music to Spotify from Nigeria", "upload music to Spotify Nigeria", "Boomplay distribution", "Audiomack distribution", "Apple Music distribution Nigeria",
+      "release music in Nigeria", "how to distribute music in Nigeria", "independent artist Nigeria", "Nigerian artists", "African music distribution",
+      "digital music distribution Africa", "playlist promotion Nigeria", "Spotify playlist promotion Nigeria", "radio promotion Nigeria", "TikTok music promotion Nigeria",
+      "music marketing Nigeria", "music PR Nigeria", "Spotify for Artists Nigeria", "YouTube Official Artist Channel", "cover art design Nigeria",
+      "free UPC and ISRC codes", "keep 100% master rights", "music royalties Nigeria", "get paid in naira for streams", "150+ streaming platforms"
+    ]
+  },
+  "pages": {
+    "/": {
+      "title": "Murranno Music, Music Distribution & Promotion in Nigeria | Spotify, Boomplay, Apple Music",
+      "description": "Distribute your music from Nigeria to Spotify, Apple Music, Boomplay, Audiomack, TikTok and 150+ stores. Get promotion, cover art and artist support from Murranno Music in Lagos, while keeping 100% of your masters.",
+      "keywords": ["music distribution Nigeria", "music promotion Nigeria", "Afrobeats distribution", "Murranno Music", "murrannomusic"],
+      "changefreq": "weekly",
+      "priority": 1.0
+    },
+    "/distribution": {
+      "title": "Music Distribution in Nigeria, Release to Spotify, Boomplay & 150+ Stores | Murranno Music",
+      "description": "Upload once and release your music from Nigeria to Spotify, Apple Music, Boomplay, Audiomack, YouTube, TikTok and 150+ stores. Free UPC & ISRC codes, 100% master ownership and royalties paid to your Nigerian bank.",
+      "keywords": ["music distribution Nigeria", "best music distribution company in Nigeria", "distribute music to Spotify from Nigeria", "Boomplay distribution", "Audiomack distribution", "free UPC and ISRC codes"],
+      "schema": "distribution",
+      "changefreq": "monthly",
+      "priority": 0.9
+    },
+    "/promotions": {
+      "title": "Music Promotion in Nigeria, Playlist, TikTok, Radio & Press Campaigns | Murranno Music",
+      "description": "Grow your audience with music promotion from Lagos: Spotify and Apple Music playlist placement, TikTok and Instagram campaigns, blog and magazine features, and radio airplay across Nigeria.",
+      "keywords": ["music promotion Nigeria", "playlist promotion Nigeria", "TikTok music promotion Nigeria", "radio promotion Nigeria", "music PR Nigeria", "Afrobeats promotion"],
+      "schema": "promotion",
+      "changefreq": "weekly",
+      "priority": 0.9
+    },
+    "/artist-profiles": {
+      "title": "Spotify for Artists, Apple Music & Boomplay Artist Profiles in Nigeria | Murranno Music",
+      "description": "Claim and verify your artist profiles on Spotify, Apple Music, Boomplay, Deezer and YouTube Official Artist Channel. Murranno Music helps Nigerian artists set up every profile from day one.",
+      "keywords": ["Spotify for Artists Nigeria", "Apple Music for Artists", "Boomplay for Artists", "YouTube Official Artist Channel", "verified artist profile"],
+      "schema": "profiles",
+      "changefreq": "monthly",
+      "priority": 0.8
+    },
+    "/about": {
+      "title": "About Murranno Music, A Lagos Music Distribution & Promotion Company",
+      "description": "Murranno Music is a Lagos-based company democratising music distribution and promotion for independent artists, labels and agencies in Nigeria, Africa and around the world.",
+      "keywords": ["Murranno Music", "music distribution company in Lagos", "Nigerian music company", "African music distribution"],
+      "changefreq": "monthly",
+      "priority": 0.7
+    },
+    "/contact": {
+      "title": "Contact Murranno Music, Music Distribution & Promotion, Lagos Nigeria",
+      "description": "Talk to Murranno Music about distribution, promotion campaigns or your account. Office: 100 Kujore Street, Ojota, Lagos. Phone and WhatsApp: +234 818 939 1868.",
+      "keywords": ["contact Murranno Music", "music promotion company in Lagos", "music distribution Lagos"],
+      "changefreq": "yearly",
+      "priority": 0.6
+    },
+    "/journal": {
+      "title": "The Music Journal, Songwriting, Fan-Building & Nigerian Music News | Murranno Music",
+      "description": "Advice and stories for independent artists: songwriting craft, growing your fanbase, Afrobeats culture and news from the Nigerian and African music industry.",
+      "keywords": ["music blog Nigeria", "songwriting tips", "how to grow fanbase", "Nigerian music news", "Afrobeats news"],
+      "changefreq": "weekly",
+      "priority": 0.7
+    },
+    "/download": {
+      "title": "Get the Murranno Music App, Release & Promote Music from Your Phone",
+      "description": "The Murranno Music app for Android and iOS: upload releases, track streams and earnings, run promotion campaigns and withdraw royalties to your Nigerian bank account.",
+      "keywords": ["Murranno app", "music distribution app Nigeria", "music app for artists"],
+      "changefreq": "monthly",
+      "priority": 0.6
+    }
+  }
+}

@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { CardSkeleton, EmptyState, ErrorState, Skeleton } from '@/components/states/StateViews';
+import { SearchX } from 'lucide-react-native';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
     Pressable, ActivityIndicator, Image,
@@ -38,23 +40,26 @@ export const ReleaseDetailPage = () => {
     const router = useRouter();
     const { colors, isDark } = useTheme();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-    const { release, loading } = useReleaseDetail(id);
+    const { release, loading, error, refetch } = useReleaseDetail(id);
 
     if (loading) {
         return (
-            <View style={[s.screen, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator color={colors.primaryGlow} size="large" />
+            <View style={[s.screen, { padding: 24, paddingTop: 72, gap: 16 }]}>
+                <Skeleton style={{ height: 260, borderRadius: 16 }} />
+                <CardSkeleton lines={4} />
+                <CardSkeleton lines={3} />
             </View>
         );
     }
 
     if (!release) {
         return (
-            <View style={[s.screen, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.mutedForeground }}>Release not found.</Text>
-                <Pressable style={s.backBtnAlt} onPress={() => router.back()}>
-                    <Text style={{ color: colors.primaryGlow, fontWeight: '700' }}>Go back</Text>
-                </Pressable>
+            <View style={[s.screen, { justifyContent: 'center' }]}>
+                {error ? (
+                    <ErrorState error={error} title="Couldn’t load this release" onRetry={refetch} />
+                ) : (
+                    <EmptyState icon={SearchX} title="Release not found" body="It may have been deleted, or the link is wrong." action={{ label: 'Back to your music', onPress: () => router.replace('/app/releases' as any) }} />
+                )}
             </View>
         );
     }
@@ -161,7 +166,7 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
     StyleSheet.create({
         screen:        { flex: 1, backgroundColor: colors.background },
         scroll:        { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, gap: 14, paddingTop: 8 },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, gap: 14, paddingTop: 8 },
 
         header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 56, paddingHorizontal: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
         headerTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground, flex: 1, textAlign: 'center' },
@@ -172,17 +177,17 @@ const makeStyles = (colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         coverArt:         { width: 110, height: 110, borderRadius: 12 },
         coverPlaceholder: { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' },
         heroInfo:         { flex: 1, gap: 4, paddingTop: 4 },
-        releaseTitle:     { fontSize: 18, fontWeight: '800', color: colors.foreground },
+        releaseTitle:     { fontSize: 18, fontWeight: '600', color: colors.foreground },
         artistName:       { fontSize: 13, color: colors.mutedForeground },
         badge:            { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
         badgeText:        { fontSize: 10, fontWeight: '700', color: '#fff' },
 
         statsRow: { flexDirection: 'row', gap: 12 },
-        statCard: { flex: 1, borderRadius: 16, borderWidth: 1, padding: 16, alignItems: 'center', gap: 4 },
-        statValue:{ fontSize: 22, fontWeight: '800' },
+        statCard: { flex: 1, borderRadius: 10, borderWidth: 1, padding: 16, alignItems: 'center', gap: 4 },
+        statValue:{ fontSize: 22, fontWeight: '600' },
         statLabel:{ fontSize: 11 },
 
-        section:      { borderRadius: 16, borderWidth: 1, padding: 16 },
+        section:      { borderRadius: 10, borderWidth: 1, padding: 16 },
         sectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 12 },
 
         trackItem:   { marginBottom: 8 },

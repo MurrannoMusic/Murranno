@@ -1,46 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, Pressable, Image,
     TextInput, ScrollView, ActivityIndicator,
     Alert, Dimensions, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
+import { useTheme } from '@/hooks/useTheme';
+import type { ThemeColors } from '@/constants/theme';
+import { appRedirect, signInWithProvider } from '@/lib/auth';
+import { notify, invoke } from '@/lib/api';
 import { supabase } from '@/integrations/supabase/client';
+import { FormError, FormField } from '@/components/forms/FormField';
+import { friendlyError } from '@/components/states/StateViews';
+import { email as emailRule, matches, ngPhone, password as passwordRule, required, validate } from '@/lib/validation';
 
 const { width: W, height: H } = Dimensions.get('window');
 
 export default function SignUp() {
     const router = useRouter();
+    const { colors } = useTheme();
+    const s = makeStyles(colors);
 
     const [firstName,  setFirstName]  = useState('');
     const [lastName,   setLastName]   = useState('');
     const [phone,      setPhone]      = useState('');
+    const [providers, setProviders] = useState({google: false, apple: false});
+    useEffect(() => { invoke('get-mobile-config').then(c => setProviders(c.providers)).catch(() => {}); }, []);
     const [email,      setEmail]      = useState('');
     const [password,   setPassword]   = useState('');
     const [confirmPw,  setConfirmPw]  = useState('');
-    const [showPw,     setShowPw]     = useState(false);
-    const [showCPw,    setShowCPw]    = useState(false);
     const [loading,    setLoading]    = useState(false);
+    const [errors,     setErrors]     = useState<Partial<Record<'firstName' | 'lastName' | 'phone' | 'email' | 'password' | 'confirmPw' | 'form', string>>>({});
+    const clear = (fn: (v: string) => void) => (v: string) => { fn(v); setErrors({}); };
 
     const handleSignUp = async () => {
-        if (!firstName || !email || !password || !confirmPw) {
-            Alert.alert('Missing fields', 'Please fill in all required fields.');
-            return;
-        }
-        if (password !== confirmPw) {
-            Alert.alert('Password mismatch', 'Passwords do not match.');
-            return;
-        }
-        if (password.length < 8) {
-            Alert.alert('Weak password', 'Password must be at least 8 characters.');
-            return;
-        }
+        const found = validate({ firstName, lastName, phone, email, password, confirmPw }, {
+            firstName: [required('your first name')],
+            lastName:  [required('your last name')],
+            phone:     [required('your phone number'), ngPhone],
+            email:     [emailRule],
+            password:  [passwordRule],
+            confirmPw: [(v) => (v ? '' : 'Re-enter your password'), matches(password)],
+        });
+        setErrors(found);
+        if (Object.keys(found).length) return;
         setLoading(true);
         const { data, error } = await supabase.auth.signUp({
             email: email.trim(),
             password,
             options: {
+                emailRedirectTo: appRedirect('auth/callback'),
                 data: {
                     first_name: firstName.trim(),
                     last_name:  lastName.trim(),
@@ -50,36 +60,30 @@ export default function SignUp() {
         });
         setLoading(false);
         if (error) {
-            Alert.alert('Sign up failed', error.message);
+            const info = friendlyError(error);
+            if (/already|registered|exists/i.test(error.message)) setErrors({ email: 'An account with this email already exists. Log in instead.' });
+            else setErrors({ form: info.kind === 'unknown' || info.kind === 'validation' ? error.message : info.message });
             return;
         }
         if (data.session) {
             router.replace('/app' as any);
         } else {
-            Alert.alert(
-                'Verify your email',
-                'A confirmation link has been sent to your email. Please verify before logging in.',
-                [{ text: 'OK', onPress: () => router.replace('/sign-in' as any) }],
-            );
+            router.replace({ pathname: '/verify-email', params: { email: email.trim() } } as any);
         }
     };
 
-    const handleOAuth = (provider: 'google' | 'apple') => {
-        Alert.alert(
-            `${provider === 'google' ? 'Google' : 'Apple'} Sign-In`,
-            'OAuth sign-in requires additional native configuration. Please use email/password for now.',
-        );
+    const handleOAuth = async (provider: 'google' | 'apple') => {
+        if (loading) return;
+        setLoading(true);
+        try { if (await signInWithProvider(provider)) router.replace('/app'); }
+        catch (error: any) { notify('Sign-in unavailable', error.message); }
+        finally { setLoading(false); }
     };
 
     return (
         <View style={s.screen}>
             {/* Background */}
-            <Image
-                source={require('../assets/images/onboarding-1.jpg')}
-                style={s.bg}
-                resizeMode="cover"
-            />
-            <View style={s.overlay} />
+            <Image source={require('@/assets/images/logo.png')} style={{ width: 160, height: 52, alignSelf: 'center', marginTop: 64 }} resizeMode="contain" />
 
             <KeyboardAvoidingView
                 style={s.flex}
@@ -93,108 +97,39 @@ export default function SignUp() {
                 >
                     {/* Back */}
                     <Pressable style={s.back} onPress={() => router.back()}>
-                        <ChevronLeft size={22} color="#fff" />
+                        <ChevronLeft size={22} color={colors.foreground} />
                     </Pressable>
 
                     {/* Card */}
                     <View style={s.card}>
-                        <Text style={s.title}>Join Murranno Music</Text>
+                        <Text accessibilityRole="header" style={s.title}>Join Murranno Music</Text>
 
                         {/* OAuth */}
                         <Text style={s.orText}>OR CONTINUE WITH</Text>
                         <View style={s.oauthRow}>
-                            <Pressable style={s.oauthBtn} onPress={() => handleOAuth('google')}>
+                            <Pressable accessibilityRole="button" disabled={loading || !providers.google} style={[s.oauthBtn, !providers.google && {opacity: 0.4}]} onPress={() => handleOAuth('google')}>
                                 <Text style={s.oauthBtnText}>G  Google</Text>
                             </Pressable>
-                            <Pressable style={s.oauthBtn} onPress={() => handleOAuth('apple')}>
+                            <Pressable accessibilityRole="button" disabled={loading || !providers.apple} style={[s.oauthBtn, !providers.apple && {opacity: 0.4}]} onPress={() => handleOAuth('apple')}>
                                 <Text style={s.oauthBtnText}> Apple</Text>
                             </Pressable>
                         </View>
 
                         {/* Name row */}
                         <View style={s.nameRow}>
-                            <View style={s.nameField}>
-                                <Text style={s.label}>First Name</Text>
-                                <TextInput
-                                    style={s.input}
-                                    placeholder="John"
-                                    placeholderTextColor="rgba(255,255,255,0.3)"
-                                    value={firstName}
-                                    onChangeText={setFirstName}
-                                />
-                            </View>
-                            <View style={s.nameField}>
-                                <Text style={s.label}>Last Name</Text>
-                                <TextInput
-                                    style={s.input}
-                                    placeholder="Doe"
-                                    placeholderTextColor="rgba(255,255,255,0.3)"
-                                    value={lastName}
-                                    onChangeText={setLastName}
-                                />
-                            </View>
+                            <FormField containerStyle={s.nameField} label="First name" placeholder="John" value={firstName} onChangeText={clear(setFirstName)} autoComplete="given-name" textContentType="givenName" error={errors.firstName} />
+                            <FormField containerStyle={s.nameField} label="Last name" placeholder="Doe" value={lastName} onChangeText={clear(setLastName)} autoComplete="family-name" textContentType="familyName" error={errors.lastName} />
                         </View>
 
-                        {/* Phone */}
-                        <Text style={s.label}>Phone Number</Text>
-                        <TextInput
-                            style={s.input}
-                            placeholder="+234..."
-                            placeholderTextColor="rgba(255,255,255,0.3)"
-                            value={phone}
-                            onChangeText={setPhone}
-                            keyboardType="phone-pad"
-                        />
+                        <FormField label="Phone number" placeholder="0803 123 4567" value={phone} onChangeText={clear(setPhone)} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" error={errors.phone} />
 
-                        {/* Email */}
-                        <Text style={s.label}>Email</Text>
-                        <TextInput
-                            style={s.input}
-                            placeholder="murrannomusic@gmail.com"
-                            placeholderTextColor="rgba(255,255,255,0.3)"
-                            value={email}
-                            onChangeText={setEmail}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                        />
+                        <FormField label="Email" placeholder="you@example.com" value={email} onChangeText={clear(setEmail)} keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" error={errors.email} />
 
-                        {/* Password */}
-                        <Text style={s.label}>Password</Text>
-                        <View style={s.pwWrap}>
-                            <TextInput
-                                style={s.pwInput}
-                                placeholder="••••••••••"
-                                placeholderTextColor="rgba(255,255,255,0.3)"
-                                value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry={!showPw}
-                            />
-                            <Pressable onPress={() => setShowPw((p) => !p)} style={s.eyeBtn}>
-                                {showPw
-                                    ? <EyeOff size={18} color="rgba(255,255,255,0.4)" />
-                                    : <Eye    size={18} color="rgba(255,255,255,0.4)" />
-                                }
-                            </Pressable>
-                        </View>
+                        <FormField password label="Password" placeholder="At least 8 characters" value={password} onChangeText={clear(setPassword)} autoComplete="new-password" textContentType="newPassword" error={errors.password} hint="Use 8+ characters with letters and numbers." />
 
-                        {/* Confirm Password */}
-                        <Text style={s.label}>Confirm Password</Text>
-                        <View style={s.pwWrap}>
-                            <TextInput
-                                style={s.pwInput}
-                                placeholder="Confirm your password"
-                                placeholderTextColor="rgba(255,255,255,0.3)"
-                                value={confirmPw}
-                                onChangeText={setConfirmPw}
-                                secureTextEntry={!showCPw}
-                            />
-                            <Pressable onPress={() => setShowCPw((p) => !p)} style={s.eyeBtn}>
-                                {showCPw
-                                    ? <EyeOff size={18} color="rgba(255,255,255,0.4)" />
-                                    : <Eye    size={18} color="rgba(255,255,255,0.4)" />
-                                }
-                            </Pressable>
-                        </View>
+                        <FormField password label="Confirm password" placeholder="Re-enter your password" value={confirmPw} onChangeText={clear(setConfirmPw)} autoComplete="new-password" textContentType="newPassword" returnKeyType="go" onSubmitEditing={handleSignUp} error={errors.confirmPw} />
+
+                        <FormError message={errors.form} />
 
                         {/* Submit */}
                         <Pressable
@@ -203,7 +138,7 @@ export default function SignUp() {
                             disabled={loading}
                         >
                             {loading
-                                ? <ActivityIndicator color="#fff" />
+                                ? <ActivityIndicator color={colors.onPrimary} />
                                 : <Text style={s.submitText}>Create Account</Text>
                             }
                         </Pressable>
@@ -221,8 +156,8 @@ export default function SignUp() {
     );
 }
 
-const s = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: '#060c1f' },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+    screen: { flex: 1, backgroundColor: colors.background },
     flex:   { flex: 1 },
     bg:     { position: 'absolute', width: W, height: H },
     overlay:{ position: 'absolute', width: W, height: H, backgroundColor: 'rgba(6,12,31,0.72)' },
@@ -232,51 +167,50 @@ const s = StyleSheet.create({
     back: { padding: 20, paddingTop: 60, alignSelf: 'flex-start' },
 
     card: {
-        backgroundColor: 'rgba(11,20,40,0.90)',
-        marginHorizontal: 16, borderRadius: 24,
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-        padding: 24, gap: 10,
+        backgroundColor: colors.background,
+        width: '100%', maxWidth: 520, alignSelf: 'center', borderRadius: 0,
+        padding: 24, gap: 14,
     },
 
-    title: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 4 },
+    title: { fontSize: 22, fontWeight: '600', color: colors.foreground, marginBottom: 4 },
 
-    orText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.4)', textAlign: 'center', letterSpacing: 1.2 },
+    orText: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, textAlign: 'center', letterSpacing: 1.2 },
     oauthRow:  { flexDirection: 'row', gap: 10 },
     oauthBtn:  {
         flex: 1, paddingVertical: 11, borderRadius: 12,
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
-        alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)',
+        borderWidth: 1, borderColor: colors.border,
+        alignItems: 'center', backgroundColor: colors.input,
     },
-    oauthBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
+    oauthBtnText: { fontSize: 13, fontWeight: '600', color: colors.foreground },
 
     nameRow:   { flexDirection: 'row', gap: 10 },
-    nameField: { flex: 1, gap: 6 },
+    nameField: { flex: 1 },
 
-    label: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
+    label: { fontSize: 13, fontWeight: '600', color: colors.foreground },
     input: {
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: colors.input,
+        borderWidth: 1, borderColor: colors.border,
         borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
-        fontSize: 14, color: '#fff',
+        fontSize: 14, color: colors.foreground,
     },
 
     pwWrap: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: colors.input,
+        borderWidth: 1, borderColor: colors.border,
         borderRadius: 12, paddingHorizontal: 14, paddingVertical: 2,
     },
-    pwInput: { flex: 1, fontSize: 14, color: '#fff', paddingVertical: 9 },
+    pwInput: { flex: 1, fontSize: 14, color: colors.foreground, paddingVertical: 9 },
     eyeBtn:  { padding: 8 },
 
     submitBtn: {
-        backgroundColor: '#7c3aed', borderRadius: 14,
+        backgroundColor: colors.primary, borderRadius: 10,
         paddingVertical: 15, alignItems: 'center', marginTop: 6,
-        shadowColor: '#7c3aed', shadowOpacity: 0.35, shadowRadius: 12, elevation: 5,
+
     },
-    submitText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+    submitText: { fontSize: 16, fontWeight: '700', color: colors.onPrimary },
 
     switchRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
-    switchText:{ fontSize: 13, color: 'rgba(255,255,255,0.5)' },
-    switchLink:{ fontSize: 13, fontWeight: '700', color: '#9333ea' },
+    switchText:{ fontSize: 13, color: colors.mutedForeground },
+    switchLink:{ fontSize: 13, fontWeight: '700', color: colors.primary },
 });

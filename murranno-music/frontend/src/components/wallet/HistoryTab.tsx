@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { EarningsTransaction } from '@/types/wallet';
 import { TransactionRow } from './TransactionRow';
 import { TransactionDetailsSheet } from './TransactionDetailsSheet';
+import { EmptyState, ErrorState, ListSkeleton, NoResults } from '@/components/states/StateViews';
+import { Receipt } from 'lucide-react';
 
 interface HistoryTabProps {
   transactions: EarningsTransaction[];
@@ -12,6 +14,10 @@ interface HistoryTabProps {
   typeFilter: string;
   onStatusFilterChange: (status: string) => void;
   onTypeFilterChange: (type: string) => void;
+  loading?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
+  totalCount?: number;
 }
 
 export const HistoryTab = ({ 
@@ -19,7 +25,11 @@ export const HistoryTab = ({
   statusFilter, 
   typeFilter,
   onStatusFilterChange,
-  onTypeFilterChange 
+  onTypeFilterChange,
+  loading = false,
+  error,
+  onRetry,
+  totalCount = transactions.length,
 }: HistoryTabProps) => {
   const [selectedTransaction, setSelectedTransaction] = useState<EarningsTransaction | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -81,10 +91,14 @@ export const HistoryTab = ({
           
           {/* Table Body */}
           <div className="divide-y divide-border">
-            {transactions.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                No transactions found
-              </div>
+            {loading ? (
+              <div className="px-4"><ListSkeleton rows={4} media={false} /></div>
+            ) : error ? (
+              <ErrorState error={error} title="Couldn’t load your transactions" onRetry={onRetry} />
+            ) : totalCount === 0 ? (
+              <EmptyState icon={Receipt} title="No transactions yet" body="Earnings and withdrawals will be listed here once your music starts earning." />
+            ) : transactions.length === 0 ? (
+              <NoResults what="transactions" onClear={() => { onStatusFilterChange('all'); onTypeFilterChange('all'); }} />
             ) : (
               transactions.map((transaction, index) => (
                 <TransactionRow 

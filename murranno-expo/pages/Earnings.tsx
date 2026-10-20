@@ -1,16 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import { CardSkeleton, EmptyState, ErrorState, ListSkeleton, NoResults, Skeleton, StatSkeleton, SuccessState, friendlyError } from '@/components/states/StateViews';
+import { FormError, FormField } from '@/components/forms/FormField';
+import { accountNumber as accountNumberRule } from '@/lib/validation';
 import {
     View, Text, ScrollView, StyleSheet, StatusBar,
     Pressable, ActivityIndicator, Modal, TextInput,
-    FlatList, Alert,
+    FlatList,
 } from 'react-native';
 import {
     Wallet, DollarSign, Clock, TrendingUp, ArrowUpRight,
     Plus, Star, Trash2, Settings, Filter, CheckCircle,
-    Music, ChevronDown, AlertCircle, CheckCircle2,
-    Eye, EyeOff,
+    Music, ChevronDown, AlertCircle,
+    Eye, EyeOff, Landmark,
 } from 'lucide-react-native';
 
+import { useRouter } from 'expo-router';
+import { useArtistProfile } from '@/hooks/useArtistProfile';
+import { invoke, confirmAction } from '@/lib/api';
 import { useTheme } from '@/hooks/useTheme';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -46,51 +52,41 @@ const AddBankModal = ({
     const [verifying, setVerifying]       = useState(false);
     const [verified, setVerified]         = useState(false);
     const [saving, setSaving]             = useState(false);
+    const [errors, setErrors]             = useState<{ bank?: string; account?: string; form?: string }>({});
+    const [banksError, setBanksError]     = useState<unknown>(null);
+    const [added, setAdded]               = useState(false);
 
     React.useEffect(() => {
         if (visible) fetchBanks();
     }, [visible]);
 
     React.useEffect(() => {
-        if (accountNumber.length === 10 && selectedBank && !verified) {
-            verifyAccount();
-        } else if (accountNumber.length < 10) {
-            setVerified(false);
-            setAccountName('');
+        let active = true;
+        setVerified(false); setAccountName(''); setVerifying(false); setErrors({});
+        if (accountNumber.length === 10 && selectedBank) {
+            setVerifying(true);
+            invoke('paystack-resolve-account', { account_number: accountNumber, bank_code: selectedBank.code })
+                .then(data => { if (active) { setAccountName(data.data.account_name); setVerified(true); } })
+                .catch(e => { if (active) setErrors({ account: friendlyError(e).kind === 'offline' ? friendlyError(e).message : 'We couldn’t find this account at the selected bank. Check the number and bank.' }); })
+                .finally(() => { if (active) setVerifying(false); });
         }
+        return () => { active = false; };
     }, [accountNumber, selectedBank]);
 
     const fetchBanks = async () => {
         try {
-            const { data } = await supabase.functions.invoke('paystack-get-banks');
+            setBanksError(null);
+            const data = await invoke('paystack-get-banks');
             if (data?.success) setBanks(data.data || []);
         } catch (err) {
-            console.error('fetchBanks error:', err);
-        }
-    };
-
-    const verifyAccount = async () => {
-        if (!selectedBank || accountNumber.length !== 10) return;
-        try {
-            setVerifying(true);
-            setAccountName('');
-            setVerified(false);
-            const { data } = await supabase.functions.invoke('paystack-resolve-account', {
-                body: { account_number: accountNumber, bank_code: selectedBank.code },
-            });
-            if (data?.success) {
-                setAccountName(data.data.account_name);
-                setVerified(true);
-            }
-        } catch (err) {
-            console.error('verifyAccount error:', err);
-        } finally {
-            setVerifying(false);
+            setBanksError(err);
         }
     };
 
     const handleSubmit = async () => {
-        if (!verified || !selectedBank) return;
+        const found = { bank: selectedBank ? undefined : 'Choose your bank', account: accountNumberRule(accountNumber) || (!verifying && !verified ? 'We couldn’t verify this account yet. Check the number.' : undefined) };
+        setErrors(found);
+        if (found.bank || found.account || !verified || !selectedBank) return;
         try {
             setSaving(true);
             const { data, error } = await supabase.functions.invoke('paystack-create-recipient', {
@@ -104,10 +100,10 @@ const AddBankModal = ({
             if (error) throw error;
             if (data?.success) {
                 onSuccess();
-                handleClose();
-            }
-        } catch (err) {
-            console.error('handleSubmit error:', err);
+                setAdded(true);
+            } else throw new Error(data?.error || 'Bank account not saved');
+        } catch (err: any) {
+            setErrors({ form: friendlyError(err).message });
         } finally {
             setSaving(false);
         }
@@ -120,6 +116,8 @@ const AddBankModal = ({
         setAccountName('');
         setVerified(false);
         setShowBankList(false);
+        setErrors({});
+        setAdded(false);
         onClose();
     };
 
@@ -132,13 +130,17 @@ const AddBankModal = ({
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
             <View style={s.modalOverlay}>
-                <View style={s.modalSheet}>
+                <View style={[s.modalSheet, {maxHeight: '90%'}]}><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                     <View style={s.modalHandle} />
+                    {added ? (
+                        <SuccessState title="Bank account added" body={`${accountName} · ${accountNumber}\nFor your security, withdrawals are paused for 24 hours after adding bank details.`} action={{ label: 'Done', onPress: handleClose }} />
+                    ) : <>
                     <Text style={s.modalTitle}>Add Bank Account</Text>
 
                     {/* Bank Selector */}
                     <Text style={s.inputLabel}>Bank</Text>
-                    <Pressable style={s.selector} onPress={() => setShowBankList(!showBankList)}>
+                    {banksError ? <ErrorState error={banksError} title="Couldn’t load the list of banks" onRetry={fetchBanks} style={{ paddingVertical: 16 }} /> : <>
+                    <Pressable accessibilityRole="button" accessibilityLabel={selectedBank ? `Bank: ${selectedBank.name}. Change` : 'Select your bank'} style={[s.selector, !!errors.bank && { borderColor: colors.destructive }]} onPress={() => setShowBankList(!showBankList)}>
                         <Text style={[s.selectorText, !selectedBank && { color: colors.mutedForeground }]}>
                             {selectedBank ? selectedBank.name : 'Select your bank'}
                         </Text>
@@ -154,6 +156,7 @@ const AddBankModal = ({
                                 value={bankSearch}
                                 onChangeText={setBankSearch}
                             />
+                            {filteredBanks.length === 0 && <Text style={{ padding: 12, color: colors.mutedForeground, fontSize: 13 }}>No banks match “{bankSearch}”.</Text>}
                             <FlatList
                                 data={filteredBanks}
                                 keyExtractor={(b) => String(b.id)}
@@ -166,6 +169,7 @@ const AddBankModal = ({
                                             setSelectedBank(item);
                                             setShowBankList(false);
                                             setBankSearch('');
+                                            setErrors({});
                                         }}
                                     >
                                         <Text style={s.bankItemText}>{item.name}</Text>
@@ -174,12 +178,15 @@ const AddBankModal = ({
                             />
                         </View>
                     )}
+                    </>}
+                    {!!errors.bank && <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 12, marginTop: 6 }}>{errors.bank}</Text>}
 
                     {/* Account Number */}
                     <Text style={[s.inputLabel, { marginTop: 16 }]}>Account Number</Text>
                     <View style={s.inputRow}>
                         <TextInput
-                            style={[s.input, { flex: 1 }]}
+                            accessibilityLabel="Account number"
+                            style={[s.input, { flex: 1 }, !!errors.account && { borderColor: colors.destructive }]}
                             placeholder="Enter 10-digit account number"
                             placeholderTextColor={colors.mutedForeground}
                             value={accountNumber}
@@ -189,6 +196,7 @@ const AddBankModal = ({
                         {verifying && <ActivityIndicator size="small" color={colors.primaryGlow} style={{ marginLeft: 8 }} />}
                         {verified && <CheckCircle size={18} color={colors.success} style={{ marginLeft: 8 }} />}
                     </View>
+                    {!!errors.account && <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 12, marginTop: 6 }}>{errors.account}</Text>}
 
                     {/* Verified Name */}
                     {accountName !== '' && (
@@ -198,13 +206,15 @@ const AddBankModal = ({
                         </View>
                     )}
 
+                    <View style={{ marginTop: 12 }}><FormError message={errors.form} /></View>
                     <Pressable
-                        style={[s.submitBtn, (!verified || saving) && { opacity: 0.5 }]}
+                        accessibilityRole="button"
+                        style={[s.submitBtn, (saving || verifying) && { opacity: 0.5 }]}
                         onPress={handleSubmit}
-                        disabled={!verified || saving}
+                        disabled={saving || verifying}
                     >
                         {saving
-                            ? <ActivityIndicator color="#fff" size="small" />
+                            ? <ActivityIndicator color={colors.onPrimary} size="small" />
                             : <Text style={s.submitBtnText}>Add Bank Account</Text>
                         }
                     </Pressable>
@@ -212,7 +222,8 @@ const AddBankModal = ({
                     <Pressable style={s.cancelBtn} onPress={handleClose}>
                         <Text style={s.cancelBtnText}>Cancel</Text>
                     </Pressable>
-                </View>
+                    </>}
+                </ScrollView></View>
             </View>
         </Modal>
     );
@@ -228,8 +239,14 @@ const WithdrawModal = ({
 }) => {
     const [amount, setAmount]               = useState('');
     const [selectedMethod, setSelectedMethod] = useState('');
+    const [pin, setPin] = useState('');
+    const idempotency = useRef<string | null>(null);
+    React.useEffect(() => { idempotency.current = null; }, [amount, selectedMethod]);
     const [loading, setLoading]             = useState(false);
-    const { payoutMethods } = usePayoutMethods();
+    const [errors, setErrors]               = useState<{ amount?: string; method?: string; pin?: string; form?: string }>({});
+    const [result, setResult]               = useState<{ status?: string; scheduled_for?: string | null; message?: string } | null>(null);
+    const { payoutMethods, refetch: refreshWithdrawalMethods, error: payoutError, loading: methodsLoading } = usePayoutMethods();
+    React.useEffect(() => { if (visible) void refreshWithdrawalMethods(); }, [visible, refreshWithdrawalMethods]);
 
     const withdrawalAmount = parseFloat(amount) || 0;
     const fee = withdrawalAmount >= 5000 ? 50 : withdrawalAmount > 0 ? 25 : 0;
@@ -241,37 +258,35 @@ const WithdrawModal = ({
     const handleClose = () => {
         setAmount('');
         setSelectedMethod('');
+        setPin(''); idempotency.current = null;
+        setErrors({}); setResult(null);
         onClose();
     };
 
     const handleWithdraw = async () => {
-        if (!amount || withdrawalAmount <= 0) {
-            Alert.alert('Error', 'Please enter a valid amount');
-            return;
-        }
-        if (exceedsBalance) {
-            Alert.alert('Error', 'Amount exceeds available balance');
-            return;
-        }
-        if (!selectedMethod) {
-            Alert.alert('Error', 'Please select a payout method');
-            return;
-        }
+        const found = {
+            amount: !amount || withdrawalAmount <= 0 ? 'Enter how much you want to withdraw'
+                : exceedsBalance ? `You can withdraw up to ₦${Number(availableBalance).toLocaleString('en-NG')}`
+                : netAmount <= 0 ? 'The amount must be more than the processing fee' : undefined,
+            method: selectedMethod ? undefined : 'Choose the bank account to pay into',
+            pin: /^\d{4}$/.test(pin) ? undefined : 'Enter your 4-digit transaction PIN',
+        };
+        setErrors(found);
+        if (found.amount || found.method || found.pin) return;
         try {
             setLoading(true);
-            const { data, error } = await supabase.functions.invoke('paystack-initiate-withdrawal', {
-                body: { payout_method_id: selectedMethod, amount: withdrawalAmount, description: 'Withdrawal from wallet' },
-            });
-            if (error) throw error;
+            idempotency.current ||= `withdraw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+            const data = await invoke('paystack-initiate-withdrawal', { payout_method_id: selectedMethod, amount: withdrawalAmount, pin, idempotency_key: idempotency.current, description: 'Withdrawal from wallet' });
             if (data?.success) {
-                Alert.alert('Success', 'Withdrawal request submitted successfully!');
+                setResult({ ...(data.data ?? {}), message: data.message });
                 onSuccess?.();
-                handleClose();
             } else {
                 throw new Error(data?.error || 'Failed to initiate withdrawal');
             }
         } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to process withdrawal');
+            const info = friendlyError(err);
+            if (/pin/i.test(err?.message ?? '')) setErrors({ pin: err.message });
+            else setErrors({ form: info.kind === 'unknown' ? (err?.message || 'Your withdrawal didn’t go through. Please try again.') : info.message });
         } finally {
             setLoading(false);
         }
@@ -280,19 +295,30 @@ const WithdrawModal = ({
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
             <View style={s.modalOverlay}>
-                <View style={s.modalSheet}>
+                <View style={[s.modalSheet, {maxHeight: '90%'}]}><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                     <View style={s.modalHandle} />
+                    {result ? (
+                        <SuccessState
+                            title={result.status === 'pending_delay' ? 'Withdrawal scheduled' : result.status === 'pending_review' ? 'Withdrawal submitted for review' : 'Withdrawal on its way'}
+                            body={result.status === 'pending_delay'
+                                ? `For your security it will be sent ${result.scheduled_for ? `on ${new Date(result.scheduled_for).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}` : 'within 12 hours'}. We’ll email you when it’s paid.`
+                                : result.status === 'pending_review'
+                                    ? 'Larger withdrawals are checked by our team first. We’ll email you as soon as it’s approved and sent.'
+                                    : 'We’ve sent it to your bank. It usually arrives within minutes, and we’ll email you when it lands.'}
+                            action={{ label: 'Done', onPress: handleClose }}
+                        />
+                    ) : <>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <Text style={s.modalTitle}>Withdraw Funds</Text>
-                        <Pressable style={[s.plusBtn, { width: 36, height: 36 }]} onPress={handleClose}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Close" style={[s.plusBtn, { width: 36, height: 36 }]} onPress={handleClose}>
                             <Text style={{ fontSize: 18, color: colors.foreground, lineHeight: 18 }}>×</Text>
                         </Pressable>
                     </View>
 
                     {/* Available Balance */}
-                    <View style={{ backgroundColor: `${colors.primaryGlow}18`, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: `${colors.primaryGlow}30`, marginBottom: 20 }}>
+                    <View style={{ backgroundColor: `${colors.primaryGlow}18`, borderRadius: 10, padding: 16, borderWidth: 1, borderColor: `${colors.primaryGlow}30`, marginBottom: 20 }}>
                         <Text style={{ fontSize: 12, color: colors.mutedForeground, marginBottom: 4 }}>Available Balance</Text>
-                        <Text style={{ fontSize: 28, fontWeight: '800', color: colors.foreground }}>₦{Number(availableBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</Text>
+                        <Text style={{ fontSize: 28, fontWeight: '600', color: colors.foreground }}>₦{Number(availableBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</Text>
                     </View>
 
                     {/* Amount */}
@@ -300,39 +326,40 @@ const WithdrawModal = ({
                     <View style={[s.inputRow, { marginBottom: 4 }]}>
                         <Text style={{ position: 'absolute', left: 14, fontSize: 16, color: colors.mutedForeground, zIndex: 1 }}>₦</Text>
                         <TextInput
-                            style={[s.input, { flex: 1, paddingLeft: 28, fontSize: 18, fontWeight: '700' }]}
+                            accessibilityLabel="Withdrawal amount"
+                            style={[s.input, { flex: 1, paddingLeft: 28, fontSize: 18, fontWeight: '700' }, (!!errors.amount || exceedsBalance) && { borderColor: colors.destructive }]}
                             placeholder="0.00"
                             placeholderTextColor={colors.mutedForeground}
                             value={amount}
-                            onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, ''))}
+                            onChangeText={(v) => { setAmount(v.replace(/[^0-9.]/g, '')); setErrors({}); }}
                             keyboardType="decimal-pad"
                         />
                     </View>
-                    {exceedsBalance && (
-                        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                    {(!!errors.amount || exceedsBalance) && (
+                        <View accessibilityRole="alert" style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
                             <AlertCircle size={14} color={colors.destructive} />
-                            <Text style={{ fontSize: 11, color: colors.destructive }}>Amount exceeds available balance</Text>
+                            <Text style={{ fontSize: 12, color: colors.destructive }}>{errors.amount ?? `You can withdraw up to ₦${Number(availableBalance).toLocaleString('en-NG')}`}</Text>
                         </View>
                     )}
 
                     {/* Payout Method */}
                     <Text style={[s.inputLabel, { marginTop: 8 }]}>Payout Method</Text>
-                    {payoutMethods.length === 0 ? (
-                        <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
-                            <Text style={{ fontSize: 13, color: colors.mutedForeground }}>No payout methods available. Please add a bank account first.</Text>
-                        </View>
+                    {payoutError && !payoutMethods.length ? <ErrorState error={payoutError} title="Couldn’t load your bank accounts" onRetry={refreshWithdrawalMethods} style={{ paddingVertical: 16 }} />
+                    : methodsLoading && !payoutMethods.length ? <ListSkeleton rows={2} media={false} /> : payoutMethods.length === 0 ? (
+                        <EmptyState icon={Landmark} title="No bank account yet" body="Add a bank account in the Methods tab to withdraw your earnings." style={{ paddingVertical: 16 }} />
                     ) : (
                         <View style={{ marginBottom: 16 }}>
                             {payoutMethods.map((m) => (
                                 <Pressable
                                     key={m.id}
+                                    accessibilityRole="radio" accessibilityLabel={`${m.bank_name} ending ${m.account_number.slice(-4)}`} accessibilityState={{checked:selectedMethod===m.id}} aria-checked={selectedMethod===m.id}
                                     style={[
                                         { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 6 },
                                         selectedMethod === m.id
                                             ? { borderColor: colors.primaryGlow, backgroundColor: `${colors.primaryGlow}18` }
                                             : { borderColor: colors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' },
                                     ]}
-                                    onPress={() => setSelectedMethod(m.id)}
+                                    onPress={() => { setSelectedMethod(m.id); setErrors({}); }}
                                 >
                                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: selectedMethod === m.id ? colors.primaryGlow : colors.border }} />
                                     <Text style={{ flex: 1, fontSize: 13, color: colors.foreground, fontWeight: '500' }}>
@@ -342,7 +369,10 @@ const WithdrawModal = ({
                             ))}
                         </View>
                     )}
+                    {!!errors.method && <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 12, marginBottom: 12 }}>{errors.method}</Text>}
 
+                    <Text style={s.inputLabel}>Transaction PIN</Text>
+                    <FormField password accessibilityLabel="Transaction PIN" value={pin} onChangeText={value => { setPin(value.replace(/\D/g, '').slice(0, 4)); setErrors({}); }} maxLength={4} keyboardType="number-pad" placeholder="4-digit PIN" error={errors.pin} containerStyle={{ marginBottom: 16 }} />
                     {/* Fee breakdown */}
                     {withdrawalAmount > 0 && (
                         <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 14, padding: 14, gap: 8, marginBottom: 12 }}>
@@ -354,8 +384,8 @@ const WithdrawModal = ({
                             ))}
                             <View style={{ height: 1, backgroundColor: colors.border }} />
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>You'll Receive</Text>
-                                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.success }}>₦{netAmount.toFixed(2)}</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>You&apos;ll Receive</Text>
+                                <Text style={{ fontSize: 16, fontWeight: '600', color: colors.success }}>₦{netAmount.toFixed(2)}</Text>
                             </View>
                         </View>
                     )}
@@ -366,17 +396,20 @@ const WithdrawModal = ({
                         <Text style={{ fontSize: 12, color: colors.mutedForeground }}>Processing time: 1-3 business days</Text>
                     </View>
 
+                    <View style={{ marginBottom: 12 }}><FormError message={errors.form} /></View>
                     <Pressable
-                        style={[s.submitBtn, (loading || !amount || exceedsBalance || !selectedMethod) && { opacity: 0.5 }]}
+                        style={[s.submitBtn, loading && { opacity: 0.5 }]}
+                        accessibilityRole="button" accessibilityLabel="Confirm withdrawal"
                         onPress={handleWithdraw}
-                        disabled={loading || !amount || exceedsBalance || !selectedMethod}
+                        disabled={loading}
                     >
                         {loading
-                            ? <ActivityIndicator color="#fff" size="small" />
+                            ? <ActivityIndicator color={colors.onPrimary} size="small" />
                             : <Text style={s.submitBtnText}>Confirm Withdrawal</Text>
                         }
                     </Pressable>
-                </View>
+                    </>}
+                </ScrollView></View>
             </View>
         </Modal>
     );
@@ -385,6 +418,7 @@ const WithdrawModal = ({
 // ─── component ────────────────────────────────────────────────────────────────
 
 export const Earnings = () => {
+    const router = useRouter();
     const { colors, isDark } = useTheme();
     const { formatAmount: fmtCurrency } = useCurrency();
     const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -395,33 +429,20 @@ export const Earnings = () => {
     const [showWithdraw, setShowWithdraw]   = useState(false);
     const [showBalance, setShowBalance]     = useState(true);
 
-    const { balance, loading: balLoading, refetch: refetchBalance } = useWalletBalance();
-    const { transactions, earningsSources, statusFilter, setStatusFilter,
-            typeFilter, setTypeFilter, loading: walLoading } = useWallet();
+    const { balance, loading: balLoading, refetch: refetchBalance, error: balanceError } = useWalletBalance();
+    const { transactions, totalCount, earningsSources, statusFilter, setStatusFilter, setTypeFilter,
+            loading: walLoading, error: walletError, refetch: refetchWallet } = useWallet();
     const { payoutMethods, loading: pmLoading, deleteMethod, setPrimary,
-            refetch: refetchMethods } = usePayoutMethods();
+            refetch: refetchMethods, error: methodsError } = usePayoutMethods();
     const { profile } = useArtistProfile();
 
-    const handleWithdrawPress = () => {
+    const handleWithdrawPress = async () => {
         if (profile?.kyc_status !== 'verified') {
-            Alert.alert(
-                'Verification Required',
-                'You must complete KYC verification before you can withdraw funds. This is required for tax and identity compliance.',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Verify Now', onPress: () => router.push('/app/kyc' as any) }
-                ]
-            );
+            if (await confirmAction('Verification required', 'Verify your identity before withdrawing. Open verification?')) router.push('/app/kyc' as any);
             return;
         }
         setShowWithdraw(true);
     };
-    const percentageChange = balance && balance.total_earnings > 0
-        ? ((balance.available_balance / balance.total_earnings) * 100).toFixed(1)
-        : '0';
-
-    const thisMonth = balance ? (balance.total_earnings * 0.15).toFixed(2) : '0.00';
-
     const TABS = [
         { id: 'balance', label: 'Balance' },
         { id: 'methods', label: 'Payout Methods' },
@@ -433,8 +454,9 @@ export const Earnings = () => {
     return (
         <View style={s.screen}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-            <AppHeader />
+            <AppHeader showCurrencyToggle />
 
+            <Text style={{ color: colors.foreground, fontSize: 32, fontWeight: '700', letterSpacing: -1, marginHorizontal: 24, marginBottom: 20 }}>Earnings</Text>
             {/* Tab Bar */}
             <View style={s.tabBar}>
                 {TABS.map((tab) => (
@@ -455,16 +477,12 @@ export const Earnings = () => {
                 {/* ─── Balance Tab ───────────────────────────────────────── */}
                 {activeTab === 'balance' && (
                     <>
-                        {balLoading ? (
-                            <View style={s.centred}>
-                                <ActivityIndicator color={colors.primaryGlow} size="large" />
-                            </View>
+                        {balLoading && !balance ? (
+                            <View style={{ gap: 12 }}><Skeleton style={{ height: 190, borderRadius: 18 }} /><StatSkeleton /></View>
+                        ) : balanceError && !balance ? (
+                            <ErrorState error={balanceError} title="Couldn’t load your balance" onRetry={refetchBalance} />
                         ) : !balance || (balance.available_balance === 0 && balance.total_earnings === 0) ? (
-                            <View style={s.emptyCard}>
-                                <Wallet size={32} color={colors.mutedForeground} />
-                                <Text style={s.emptyTitle}>No balance yet</Text>
-                                <Text style={s.emptySubtitle}>Earnings will appear here once your music starts streaming</Text>
-                            </View>
+                            <EmptyState icon={Wallet} title="No earnings yet" body="Royalties show up here once stores report streams of your music, usually 2–3 months after release." action={{ label: 'Upload music', to: '/app/upload' }} />
                         ) : (
                             <>
                                 {/* Balance Card */}
@@ -473,9 +491,8 @@ export const Earnings = () => {
                                         <View>
                                             <Text style={s.availableLabel}>AVAILABLE BALANCE</Text>
                                             <Text style={s.balanceAmount}>
-                                                <Text style={s.balanceCurrency}>₦</Text>
-                                                {showBalance 
-                                                    ? Number(balance.available_balance).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                                                                                {showBalance
+                                                    ? fmtCurrency(balance.available_balance)
                                                     : '••••••'
                                                 }
                                             </Text>
@@ -503,10 +520,10 @@ export const Earnings = () => {
                                     </View>
 
                                     <View style={s.balanceBtns}>
-                                        <Pressable style={s.withdrawBtn} onPress={handleWithdrawPress}>
+                                        <Pressable accessibilityRole="button" accessibilityLabel="Withdraw funds" style={s.withdrawBtn} onPress={handleWithdrawPress}>
                                             <Text style={s.withdrawBtnText}>Withdraw Funds</Text>
                                         </Pressable>
-                                        <Pressable style={s.plusBtn}>
+                                        <Pressable accessibilityRole="button" accessibilityLabel="Add payout account" style={s.plusBtn} onPress={() => setShowAddBank(true)}>
                                             <Plus size={18} color={colors.foreground} />
                                         </Pressable>
                                     </View>
@@ -519,7 +536,6 @@ export const Earnings = () => {
                                             <View style={[s.statIcon, { backgroundColor: `${colors.primaryGlow}22` }]}>
                                                 <DollarSign size={14} color={colors.primaryGlow} />
                                             </View>
-                                            <Text style={s.statGrowth}>+{percentageChange}%</Text>
                                         </View>
                                         <Text style={s.statValue}>{fmtCurrency(balance.total_earnings)}</Text>
                                         <Text style={s.statLabel}>TOTAL EARNINGS</Text>
@@ -529,10 +545,9 @@ export const Earnings = () => {
                                             <View style={[s.statIcon, { backgroundColor: `${colors.primaryGlow}22` }]}>
                                                 <TrendingUp size={14} color={colors.primaryGlow} />
                                             </View>
-                                            <Text style={s.statGrowth}>+8%</Text>
                                         </View>
-                                        <Text style={s.statValue}>₦{thisMonth}</Text>
-                                        <Text style={s.statLabel}>THIS MONTH</Text>
+                                        <Text style={s.statValue}>{fmtCurrency(balance.pending_balance)}</Text>
+                                        <Text style={s.statLabel}>PENDING ROYALTIES</Text>
                                     </View>
                                 </View>
 
@@ -548,14 +563,14 @@ export const Earnings = () => {
                                                 <View style={{ flex: 1 }}>
                                                     <View style={s.sourceTopRow}>
                                                         <Text style={s.sourcePlatform}>{src.platform}</Text>
-                                                        <Text style={s.sourceAmount}>₦{src.amount.toFixed(2)}</Text>
+                                                        <Text style={s.sourceAmount}>{fmtCurrency(src.amount)}</Text>
                                                     </View>
                                                     <Text style={s.sourceStreams}>
-                                                        {src.streams?.toLocaleString() ?? 0} streams
+                                                        {src.streams == null ? 'Reported royalties' : `${src.streams.toLocaleString()} streams`}
                                                     </Text>
                                                 </View>
-                                                <Text style={[s.sourceGrowth, { color: src.growth >= 0 ? colors.success : colors.destructive }]}>
-                                                    {src.growth >= 0 ? '+' : ''}{src.growth}%
+                                                <Text style={[s.sourceGrowth, { color: (src.growth ?? 0) >= 0 ? colors.success : colors.destructive }]}>
+                                                    {src.growth == null ? '' : `${src.growth >= 0 ? '+' : ''}${src.growth}%`}
                                                 </Text>
                                             </View>
                                         ))}
@@ -569,10 +584,10 @@ export const Earnings = () => {
                 {/* ─── Payout Methods Tab ─────────────────────────────────── */}
                 {activeTab === 'methods' && (
                     <>
-                        {pmLoading ? (
-                            <View style={s.centred}>
-                                <ActivityIndicator color={colors.primaryGlow} size="large" />
-                            </View>
+                        {pmLoading && !payoutMethods.length ? (
+                            <CardSkeleton lines={3} />
+                        ) : methodsError && !payoutMethods.length ? (
+                            <ErrorState error={methodsError} title="Couldn’t load your bank accounts" onRetry={refetchMethods} />
                         ) : (
                             <>
                                 {/* Methods Card */}
@@ -583,19 +598,13 @@ export const Earnings = () => {
                                             style={s.addBtn}
                                             onPress={() => setShowAddBank(true)}
                                         >
-                                            <Plus size={14} color="#fff" />
+                                            <Plus size={14} color={colors.onPrimary} />
                                             <Text style={s.addBtnText}>Add</Text>
                                         </Pressable>
                                     </View>
 
                                     {payoutMethods.length === 0 ? (
-                                        <View style={s.methodsEmpty}>
-                                            <Text style={s.methodsEmptyText}>No payout methods added yet</Text>
-                                            <Pressable style={s.addFirstBtn} onPress={() => setShowAddBank(true)}>
-                                                <Plus size={14} color={colors.primaryGlow} />
-                                                <Text style={s.addFirstBtnText}>Add your first bank account</Text>
-                                            </Pressable>
-                                        </View>
+                                        <EmptyState icon={Landmark} title="No bank account yet" body="Add the Nigerian bank account you want your earnings paid into." action={{ label: 'Add bank account', onPress: () => setShowAddBank(true) }} />
                                     ) : (
                                         payoutMethods.map((method) => (
                                             <View key={method.id} style={s.methodItem}>
@@ -692,14 +701,14 @@ export const Earnings = () => {
                                     <Text key={col} style={[s.txHeaderCell, col === 'Status' && { textAlign: 'right' }]}>{col}</Text>
                                 ))}
                             </View>
-                            {walLoading ? (
-                                <View style={{ padding: 24, alignItems: 'center' }}>
-                                    <ActivityIndicator color={colors.primaryGlow} />
-                                </View>
+                            {walLoading && !totalCount ? (
+                                <ListSkeleton rows={4} media={false} />
+                            ) : walletError && !totalCount ? (
+                                <ErrorState error={walletError} title="Couldn’t load your transactions" onRetry={refetchWallet} />
+                            ) : totalCount === 0 ? (
+                                <EmptyState icon={Clock} title="No transactions yet" body="Royalty credits and withdrawals will be listed here." />
                             ) : transactions.length === 0 ? (
-                                <View style={{ padding: 32, alignItems: 'center' }}>
-                                    <Text style={s.emptySubtitle}>No transactions found</Text>
-                                </View>
+                                <NoResults what="transactions" onClear={() => { setStatusFilter('all'); setTypeFilter('all'); }} />
                             ) : (
                                 transactions.map((tx, i) => (
                                     <View key={tx.id} style={[s.txRow, i < transactions.length - 1 && s.txRowBorder]}>
@@ -735,7 +744,7 @@ export const Earnings = () => {
                 visible={showWithdraw}
                 onClose={() => setShowWithdraw(false)}
                 availableBalance={balance?.available_balance ?? 0}
-                onSuccess={refetchBalance}
+                onSuccess={() => { refetchBalance(); refetchWallet(); }}
                 colors={colors}
                 isDark={isDark}
             />
@@ -749,29 +758,28 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
   return StyleSheet.create({
         screen:  { flex: 1, backgroundColor: colors.background },
         scroll:  { flex: 1 },
-        scrollContent: { paddingHorizontal: 16, gap: 14, paddingTop: 4 },
+        scrollContent: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, gap: 14, paddingTop: 4 },
         centred: { padding: 48, alignItems: 'center' },
 
         // Tab bar
         tabBar: {
-            flexDirection: 'row', marginHorizontal: 16, marginBottom: 12,
+            flexDirection: 'row', marginHorizontal: 24, marginBottom: 12,
             backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
             borderRadius: 14, padding: 3,
         },
         tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 12, alignItems: 'center' },
-        tabBtnActive: { backgroundColor: colors.card, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
+        tabBtnActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
         tabBtnText: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground },
         tabBtnTextActive: { color: colors.foreground },
 
         // Balance card
         balanceCard: {
-            borderRadius: 20, padding: 20,
-            backgroundColor: isDark ? '#0d1526' : colors.card,
-            borderWidth: 1, borderColor: colors.border,
+            paddingVertical: 12,
+            backgroundColor: colors.background,
         },
         balanceCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
         availableLabel: { fontSize: 10, fontWeight: '700', color: colors.mutedForeground, letterSpacing: 0.8, marginBottom: 4 },
-        balanceAmount:  { fontSize: 32, fontWeight: '800', color: colors.foreground },
+        balanceAmount:  { fontSize: 32, fontWeight: '600', color: colors.foreground },
         balanceCurrency:{ fontSize: 20, fontWeight: '500', color: colors.mutedForeground },
         balanceDollarBadge: {
             backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
@@ -796,24 +804,24 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         // Stat cards
         statRow:  { flexDirection: 'row', gap: 12 },
         statCard: {
-            flex: 1, borderRadius: 20, padding: 14,
-            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, gap: 4,
+            flex: 1, paddingVertical: 14,
+            borderBottomWidth: 1, borderBottomColor: colors.border, gap: 8,
         },
         statCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
         statIcon:    { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
         statGrowth:  { fontSize: 10, fontWeight: '700', color: colors.success },
-        statValue:   { fontSize: 17, fontWeight: '800', color: colors.foreground },
+        statValue:   { fontSize: 17, fontWeight: '600', color: colors.foreground },
         statLabel:   { fontSize: 9, fontWeight: '600', color: colors.mutedForeground, letterSpacing: 0.5 },
 
         // Sources
         sourcesCard: {
-            borderRadius: 20, padding: 16,
-            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+            paddingVertical: 20,
+            backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border,
         },
         sourcesTitle: { fontSize: 10, fontWeight: '700', color: colors.mutedForeground, letterSpacing: 0.8, marginBottom: 12 },
         sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
         sourceIcon: {
-            width: 40, height: 40, borderRadius: 20,
+            width: 40, height: 40, borderRadius: 12,
             backgroundColor: `${colors.primaryGlow}22`,
             justifyContent: 'center', alignItems: 'center',
         },
@@ -825,8 +833,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
 
         // Generic card
         card: {
-            borderRadius: 20, padding: 16,
-            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+            paddingVertical: 20,
+            backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border,
         },
         cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
         cardTitle:  { fontSize: 16, fontWeight: '700', color: colors.foreground },
@@ -838,7 +846,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             backgroundColor: colors.primaryGlow, borderRadius: 10,
             paddingHorizontal: 12, paddingVertical: 6,
         },
-        addBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+        addBtnText: { fontSize: 13, fontWeight: '700', color: colors.onPrimary },
 
         // Methods empty
         methodsEmpty: { paddingVertical: 24, alignItems: 'center', gap: 12 },
@@ -852,7 +860,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border,
         },
         methodAvatar: {
-            width: 40, height: 40, borderRadius: 20,
+            width: 40, height: 40, borderRadius: 12,
             backgroundColor: `${colors.primaryGlow}22`,
             justifyContent: 'center', alignItems: 'center',
         },
@@ -863,14 +871,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         verifiedPill:    { backgroundColor: `${colors.success}22`, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
         verifiedPillText:{ fontSize: 10, fontWeight: '600', color: colors.success },
         methodCurrency:  { fontSize: 10, color: colors.mutedForeground, alignSelf: 'center' },
-        methodAction:    { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
-        settingsBtn:     { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+        methodAction:    { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
+        settingsBtn:     { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
 
         // Filters
-        filterPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: colors.border, marginRight: 6 },
+        filterPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginRight: 6 },
         filterPillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
         filterPillText: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground },
-        filterPillTextActive: { color: '#fff' },
+        filterPillTextActive: { color: colors.onPrimary },
 
         // Transactions
         txHeader: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 4, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 8, marginBottom: 4 },
@@ -883,7 +891,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
 
         // Empty state
         emptyCard: {
-            borderRadius: 20, padding: 40, alignItems: 'center', gap: 10,
+            borderRadius: 12, padding: 40, alignItems: 'center', gap: 10,
             backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
         },
         emptyTitle:    { fontSize: 16, fontWeight: '700', color: colors.foreground },
@@ -900,7 +908,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             width: 36, height: 4, borderRadius: 2,
             backgroundColor: colors.border, alignSelf: 'center', marginBottom: 20,
         },
-        modalTitle: { fontSize: 20, fontWeight: '800', color: colors.foreground, marginBottom: 20 },
+        modalTitle: { fontSize: 20, fontWeight: '600', color: colors.foreground, marginBottom: 20 },
         inputLabel: { fontSize: 13, fontWeight: '600', color: colors.foreground, marginBottom: 6 },
         selector: {
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -909,7 +917,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
         },
         selectorText: { fontSize: 14, color: colors.foreground },
         bankDropdown: {
-            backgroundColor: isDark ? '#101d36' : colors.card,
+            backgroundColor: colors.card,
             borderWidth: 1, borderColor: colors.border,
             borderRadius: 12, marginTop: 4, overflow: 'hidden',
         },
@@ -937,7 +945,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
             backgroundColor: colors.primaryGlow, borderRadius: 14,
             paddingVertical: 14, alignItems: 'center', marginTop: 20,
         },
-        submitBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+        submitBtnText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
         cancelBtn: { paddingVertical: 14, alignItems: 'center', marginTop: 4 },
         cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.mutedForeground },
     });

@@ -1,18 +1,4 @@
 import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
-import { shouldShowMobileRoutes } from '@/utils/platformDetection';
 
-interface MobileOnlyRouteProps {
-  children: ReactNode;
-}
-
-export const MobileOnlyRoute = ({ children }: MobileOnlyRouteProps) => {
-  // Synchronous detection - no delay!
-  const shouldShow = shouldShowMobileRoutes();
-
-  if (!shouldShow) {
-    return <Navigate to="/desktop" replace />;
-  }
-
-  return <>{children}</>;
-};
+// The app is responsive on every screen size now; kept as a pass-through so routes don't change.
+export const MobileOnlyRoute = ({ children }: { children: ReactNode }) => <>{children}</>;
